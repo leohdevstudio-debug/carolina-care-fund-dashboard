@@ -51,6 +51,10 @@ progress: {
   budget: "Budget",
   spent: "Spent",
 },
+
+  footer: {
+    note: "All amounts reported in {currency} · Data refreshes every 30 minutes",
+  },
 };
 
 export default en;

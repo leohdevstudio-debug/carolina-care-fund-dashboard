@@ -48,6 +48,10 @@ charts: {
   budget: "Presupuesto",
   spent: "Gastado",
 },
+
+  footer: {
+    note: "Todos los montos en {currency} · Los datos se actualizan cada 30 minutos",
+  },
 };
 
 export default es;

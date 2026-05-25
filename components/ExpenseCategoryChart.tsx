@@ -21,25 +21,35 @@ type Props = {
   data: ExpenseByCategory[];
 };
 
+/* Violet-to-fuchsia palette for accessible, distinct slice colours */
 const COLORS = [
-  "#1e293b",
-  "#334155",
-  "#475569",
-  "#64748b",
-  "#94a3b8",
-  "#3b82f6",
-  "#6366f1",
-  "#0ea5e9",
+  "#7C3AED", // violet-700
+  "#A78BFA", // violet-400
+  "#C084FC", // purple-400
+  "#E879F9", // fuchsia-400
+  "#F0ABFC", // fuchsia-300
+  "#C026D3", // fuchsia-600 (contrast break between the lighter shades)
+  "#818CF8", // indigo-400
+  "#DDD6FE", // violet-200
 ];
 
 export default function ExpenseCategoryChart({ data }: Props) {
   if (!data.length) {
-    return <p className="text-sm text-slate-500">No expense data available yet.</p>;
+    return (
+      <p className="py-8 text-center text-sm text-muted">
+        No expense data available yet.
+      </p>
+    );
   }
 
   return (
-    <div className="h-[360px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
+    /*
+     * min-w-0 prevents grid/flex overflow that causes ResponsiveContainer
+     * to measure a negative width on first render.
+     * width="99%" + explicit height bypasses the Recharts -1 warning.
+     */
+    <div className="w-full min-w-0">
+      <ResponsiveContainer width="99%" height={400}>
         <PieChart>
           <Pie
             data={data}
@@ -47,14 +57,20 @@ export default function ExpenseCategoryChart({ data }: Props) {
             nameKey="category_name"
             cx="50%"
             cy="50%"
-            outerRadius={110}
-label={(entry: any) => {
-  const percent = entry.percent ?? 0;
-
-  if (percent < 0.05) return ""; // hide very small slices
-
-  return `${(percent * 100).toFixed(0)}%`;
-}}
+            outerRadius={100}
+            /*
+             * Disable animation to prevent the double-render artefact
+             * that causes labels like "00%" to appear briefly on screen.
+             */
+            isAnimationActive={false}
+            labelLine={{ stroke: "#C4B5FD", strokeWidth: 1 }}
+            label={(entry: { percent?: number }) => {
+              const percent = entry.percent ?? 0;
+              // Skip slices that are invalid, below 5 %, or round to zero
+              if (!isFinite(percent) || percent < 0.05) return "";
+              const rounded = Math.round(percent * 100);
+              return rounded > 0 ? `${rounded}%` : "";
+            }}
           >
             {data.map((item, index) => (
               <Cell
@@ -63,13 +79,19 @@ label={(entry: any) => {
               />
             ))}
           </Pie>
-<Tooltip
-  formatter={(value: any, name: any) => [
-    formatCurrency(Number(value)),
-    name,
-  ]}
-/>
-          <Legend />
+          <Tooltip
+            formatter={(value, name) => [
+              formatCurrency(Number(value)),
+              String(name),
+            ]}
+            contentStyle={{
+              borderRadius: "10px",
+              border: "1px solid #E7E0D5",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
+              fontSize: "13px",
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "12px" }} />
         </PieChart>
       </ResponsiveContainer>
     </div>

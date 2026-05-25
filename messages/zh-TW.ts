@@ -49,6 +49,9 @@ progress: {
   spent: "已支出",
 },
 
+  footer: {
+    note: "所有金額以 {currency} 報告 · 數據每30分鐘更新一次",
+  },
 };
 
 export default zhTW;

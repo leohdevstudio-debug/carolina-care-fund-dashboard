@@ -31,72 +31,132 @@ export default function BudgetVsSpentChart({
   currency,
   labels,
 }: BudgetVsSpentChartProps) {
-  return (
-    <div className="h-[360px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-<BarChart
-  data={data}
-  margin={{ top: 8, right: 16, left: 24, bottom: 8 }}
->
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis
-  dataKey="category_name"
-  angle={-15}
-  textAnchor="end"
-  height={70}
-  interval={0}
-/>
-          <YAxis
-  tickFormatter={(value) =>
+  if (!data.length) {
+    return (
+      <p className="py-8 text-center text-sm text-muted">
+        No budget data available yet.
+      </p>
+    );
+  }
+
+  const formatAmount = (val: unknown) =>
+    new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(typeof val === "number" ? val : Number(val ?? 0));
+
+  const formatAxisAmount = (value: number) =>
     new Intl.NumberFormat(undefined, {
       style: "currency",
       currency,
       maximumFractionDigits: 0,
-    }).format(value)
-  }
-/>
-<Tooltip
-  content={({ active, payload, label }) => {
-    if (!active || !payload || payload.length === 0) return null;
+    }).format(value);
 
-    const budget = payload.find(p => p.dataKey === "total_budget_base")?.value;
-    const spent = payload.find(p => p.dataKey === "total_spent_base")?.value;
+  return (
+    /*
+     * min-w-0 prevents grid/flex children from overflowing their cell,
+     * which would otherwise cause ResponsiveContainer to measure a
+     * negative or zero width on initial render.
+     * width="99%" + explicit height avoids the Recharts -1 warning.
+     */
+    <div className="w-full min-w-0">
+      <ResponsiveContainer width="99%" height={420}>
+        <BarChart
+          data={data}
+          margin={{ top: 8, right: 16, left: 24, bottom: 16 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#E7E0D5" vertical={false} />
+          <XAxis
+            dataKey="category_name"
+            angle={-45}
+            textAnchor="end"
+            height={90}
+            interval={0}
+            /* Truncate labels longer than 13 chars so they don't overlap on narrow screens */
+            tickFormatter={(value) => {
+              const label = String(value);
+              return label.length > 13 ? `${label.slice(0, 13)}…` : label;
+            }}
+            tick={{ fontSize: 10, fill: "#78716C" }}
+            axisLine={{ stroke: "#E7E0D5" }}
+            tickLine={false}
+          />
+          <YAxis
+            tickFormatter={formatAxisAmount}
+            tick={{ fontSize: 11, fill: "#78716C" }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            content={({ active, payload, label }) => {
+              if (!active || !payload || payload.length === 0) return null;
 
-    const format = (val: unknown) =>
-      new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 2,
-      }).format(typeof val === "number" ? val : Number(val ?? 0));
+              const budget = payload.find(
+                (p) => p.dataKey === "total_budget_base"
+              )?.value;
+              const spent = payload.find(
+                (p) => p.dataKey === "total_spent_base"
+              )?.value;
 
-    return (
-      <div className="rounded-lg border bg-white p-3 shadow-sm">
-        <div className="mb-2 text-sm font-medium">{label}</div>
-        <div className="text-sm">
-          <div>
-            {labels.budget}: {format(budget)}
-          </div>
-          <div>
-            {labels.spent}: {format(spent)}
-          </div>
-        </div>
-      </div>
-    );
-  }}
-/>
-          <Legend />
-<Bar
-  dataKey="total_budget_base"
-  name={labels.budget}
-  fill="#0f172a"
-  radius={[6, 6, 0, 0]}
-/>
-<Bar
-  dataKey="total_spent_base"
-  name={labels.spent}
-  fill="#38bdf8"
-  radius={[6, 6, 0, 0]}
-/>
+              return (
+                <div
+                  style={{
+                    borderRadius: "10px",
+                    border: "1px solid #E7E0D5",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
+                    background: "#FFFFFF",
+                    padding: "10px 14px",
+                    fontSize: "13px",
+                  }}
+                >
+                  <div
+                    style={{
+                      marginBottom: "8px",
+                      fontWeight: 600,
+                      color: "#1C1917",
+                    }}
+                  >
+                    {label}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                      color: "#78716C",
+                    }}
+                  >
+                    <span>
+                      {labels.budget}:{" "}
+                      <span style={{ color: "#1C1917", fontWeight: 500 }}>
+                        {formatAmount(budget)}
+                      </span>
+                    </span>
+                    <span>
+                      {labels.spent}:{" "}
+                      <span style={{ color: "#1C1917", fontWeight: 500 }}>
+                        {formatAmount(spent)}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              );
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} />
+          <Bar
+            dataKey="total_budget_base"
+            name={labels.budget}
+            fill="#A78BFA"
+            radius={[5, 5, 0, 0]}
+          />
+          <Bar
+            dataKey="total_spent_base"
+            name={labels.spent}
+            fill="#E879F9"
+            radius={[5, 5, 0, 0]}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
