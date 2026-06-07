@@ -52,4 +52,42 @@ describe("admin login route", () => {
       })
     );
   });
+
+  it("does not mark local HTTP cookies as secure in production mode", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    await POST(loginRequest("admin-pass"));
+
+    expect(cookieSet).toHaveBeenCalledWith(
+      "ccf_admin_session",
+      expect.any(String),
+      expect.objectContaining({
+        path: "/",
+        secure: false,
+      })
+    );
+  });
+
+  it("marks cookies as secure when forwarded protocol is HTTPS", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    await POST(
+      new Request("http://localhost/api/admin/login", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-proto": "https",
+        },
+        body: JSON.stringify({ password: "admin-pass" }),
+      })
+    );
+
+    expect(cookieSet).toHaveBeenCalledWith(
+      "ccf_admin_session",
+      expect.any(String),
+      expect.objectContaining({
+        secure: true,
+      })
+    );
+  });
 });

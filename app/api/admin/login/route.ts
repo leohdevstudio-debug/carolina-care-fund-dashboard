@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { buildAdminSessionToken, getAdminPassword } from "@/lib/admin/auth";
+import { shouldUseSecureAdminCookie } from "@/lib/admin/cookieOptions";
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_TTL_MS,
@@ -19,7 +20,7 @@ export async function POST(request: Request): Promise<Response> {
   cookieStore.set(ADMIN_SESSION_COOKIE, buildAdminSessionToken(), {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureAdminCookie(request),
     maxAge: Math.floor(ADMIN_SESSION_TTL_MS / 1000),
     path: "/",
   });
