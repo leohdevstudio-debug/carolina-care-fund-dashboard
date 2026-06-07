@@ -19,6 +19,7 @@ type ExpenseByCategory = {
 
 type Props = {
   data: ExpenseByCategory[];
+  currency: string;
 };
 
 /* Violet-to-fuchsia palette for accessible, distinct slice colours */
@@ -33,7 +34,7 @@ const COLORS = [
   "#DDD6FE", // violet-200
 ];
 
-export default function ExpenseCategoryChart({ data }: Props) {
+export default function ExpenseCategoryChart({ data, currency }: Props) {
   if (!data.length) {
     return (
       <p className="py-8 text-center text-sm text-muted">
@@ -81,7 +82,7 @@ export default function ExpenseCategoryChart({ data }: Props) {
           </Pie>
           <Tooltip
             formatter={(value, name) => [
-              formatCurrency(Number(value)),
+              formatCurrency(Number(value), currency),
               String(name),
             ]}
             contentStyle={{

@@ -3,7 +3,16 @@
 import { useEffect, useState } from "react";
 import SummaryCard from "@/components/SummaryCard";
 import SectionCard from "@/components/SectionCard";
-import { formatCurrency, formatDate, BASE_CURRENCY } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  BASE_CURRENCY,
+  DISPLAY_CURRENCIES,
+  convertFromBase,
+  isDisplayCurrency,
+  normalizeExchangeRateResponse,
+  type DisplayCurrency,
+  type ExchangeRateResponse,
+} from "@/lib/currency";
 import { messages, Locale } from "@/messages";
 import ExpenseCategoryChart from "@/components/ExpenseCategoryChart";
 import BudgetVsSpentChart from "@/components/BudgetVsSpentChart";
@@ -23,6 +32,18 @@ type Props = {
   expenses: PublicExpense[];
 };
 
+const DEFAULT_EXCHANGE_RATES: ExchangeRateResponse = {
+  baseCurrency: BASE_CURRENCY,
+  rates: {
+    AUD: 1,
+    USD: 1,
+    TWD: 1,
+  },
+  source: BASE_CURRENCY,
+  fetchedAt: "1970-01-01T00:00:00.000Z",
+  isFallback: false,
+};
+
 export default function DashboardClient({
   summary,
   expenseByCategory,
@@ -31,13 +52,20 @@ export default function DashboardClient({
   expenses,
 }: Props) {
   const [locale, setLocale] = useState<Locale>("en");
+  const [displayCurrency, setDisplayCurrency] =
+    useState<DisplayCurrency>(BASE_CURRENCY);
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRateResponse>(
+    DEFAULT_EXCHANGE_RATES
+  );
+  const [currencyStatus, setCurrencyStatus] = useState<
+    "idle" | "loading" | "error"
+  >("idle");
   const [animatedProgress, setAnimatedProgress] = useState(0);
 
   useEffect(() => {
     const saved = localStorage.getItem("locale") as Locale | null;
 
     if (saved) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocale(saved);
       return;
     }
@@ -57,6 +85,60 @@ export default function DashboardClient({
     localStorage.setItem("locale", locale);
   }, [locale]);
 
+  useEffect(() => {
+    const saved = localStorage.getItem("displayCurrency");
+
+    if (isDisplayCurrency(saved)) {
+      setDisplayCurrency(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("displayCurrency", displayCurrency);
+  }, [displayCurrency]);
+
+  useEffect(() => {
+    if (displayCurrency === BASE_CURRENCY) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    async function loadExchangeRates() {
+      setCurrencyStatus("loading");
+
+      try {
+        const response = await fetch("/api/exchange-rates");
+
+        if (!response.ok) {
+          throw new Error("Exchange-rate request failed");
+        }
+
+        const nextExchangeRates = normalizeExchangeRateResponse(
+          await response.json()
+        );
+
+        if (isCurrent) {
+          setExchangeRates(nextExchangeRates);
+          setCurrencyStatus("idle");
+        }
+      } catch {
+        if (isCurrent) {
+          setDisplayCurrency(BASE_CURRENCY);
+          setCurrencyStatus("error");
+        }
+      }
+    }
+
+    loadExchangeRates();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [displayCurrency]);
+
+  const t = messages[locale];
+
   const targetAmount = Number(summary.target_amount ?? 0);
   const totalReceived = Number(summary.total_received_base ?? 0);
 
@@ -73,21 +155,72 @@ export default function DashboardClient({
     return () => clearTimeout(timer);
   }, [progressPercentage]);
 
-  const t = messages[locale];
+  const displayLocale =
+    locale === "zh-TW" ? "zh-TW" : locale === "es" ? "es-ES" : "en-AU";
 
-  const buttonClass = (lang: Locale) =>
+  const displayAmount = (value: number | null | undefined) =>
+    convertFromBase(value, displayCurrency, exchangeRates);
+
+  const formatDisplayCurrency = (value: number | null | undefined) =>
+    formatCurrency(displayAmount(value), displayCurrency, displayLocale);
+
+  const convertedExpenseByCategory = expenseByCategory.map((item) => ({
+    ...item,
+    total_spent_base: displayAmount(item.total_spent_base),
+  }));
+
+  const convertedBudgetVsSpent = budgetVsSpent.map((item) => ({
+    ...item,
+    total_budget_base: displayAmount(item.total_budget_base),
+    total_spent_base: displayAmount(item.total_spent_base),
+    variance_base: displayAmount(item.variance_base),
+  }));
+
+  const rateDate = formatDate(exchangeRates.fetchedAt);
+  const rateNote =
+    displayCurrency === BASE_CURRENCY
+      ? t.footer.baseNote.replace("{currency}", BASE_CURRENCY)
+      : `${t.footer.convertedNote.replace("{currency}", displayCurrency)} - ${
+          exchangeRates.isFallback
+            ? t.footer.fallbackRate.replace("{date}", rateDate)
+            : t.footer.rateUpdated.replace("{date}", rateDate)
+        }`;
+
+  const selectorButtonClass = (active: boolean) =>
     `px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-1 ${
-      locale === lang
+      active
         ? "bg-violet-400 text-violet-950 shadow-sm"
         : "text-muted hover:text-foreground"
     }`;
 
+  const setCurrency = (currency: DisplayCurrency) => {
+    setCurrencyStatus("idle");
+    setDisplayCurrency(currency);
+  };
+
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 md:py-12">
       <div className="mx-auto flex max-w-7xl flex-col gap-8">
+        {/* Currency and language selectors */}
+        <div className="flex flex-wrap justify-end gap-3">
+          <div
+            role="group"
+            aria-label={t.currency.selectorLabel}
+            className="flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-1.5 shadow-sm"
+          >
+            {DISPLAY_CURRENCIES.map((currency) => (
+              <button
+                key={currency}
+                type="button"
+                onClick={() => setCurrency(currency)}
+                className={selectorButtonClass(displayCurrency === currency)}
+                aria-pressed={displayCurrency === currency}
+              >
+                {currency}
+              </button>
+            ))}
+          </div>
 
-        {/* Language selector */}
-        <div className="flex justify-end">
           <div
             role="group"
             aria-label="Select language"
@@ -96,7 +229,7 @@ export default function DashboardClient({
             <button
               type="button"
               onClick={() => setLocale("en")}
-              className={buttonClass("en")}
+              className={selectorButtonClass(locale === "en")}
               aria-pressed={locale === "en"}
             >
               EN
@@ -104,7 +237,7 @@ export default function DashboardClient({
             <button
               type="button"
               onClick={() => setLocale("es")}
-              className={buttonClass("es")}
+              className={selectorButtonClass(locale === "es")}
               aria-pressed={locale === "es"}
             >
               ES
@@ -112,7 +245,7 @@ export default function DashboardClient({
             <button
               type="button"
               onClick={() => setLocale("zh-TW")}
-              className={buttonClass("zh-TW")}
+              className={selectorButtonClass(locale === "zh-TW")}
               aria-pressed={locale === "zh-TW"}
             >
               中文
@@ -148,7 +281,7 @@ export default function DashboardClient({
               </p>
             </div>
 
-            {/* Campaign name — serif display */}
+            {/* Campaign name - serif display */}
             <h1 className="mt-4 font-serif text-4xl font-semibold leading-tight tracking-tight text-violet-950 md:text-5xl">
               {summary.campaign_name}
             </h1>
@@ -180,7 +313,7 @@ export default function DashboardClient({
               <span className="inline-flex items-center rounded-full border border-violet-950/15 bg-violet-950/10 px-4 py-1.5 text-xs font-medium text-violet-900 backdrop-blur-sm">
                 {t.header.targetAmount}:{" "}
                 {summary.target_amount
-                  ? formatCurrency(summary.target_amount)
+                  ? formatDisplayCurrency(summary.target_amount)
                   : t.header.notSet}
               </span>
             </div>
@@ -195,7 +328,9 @@ export default function DashboardClient({
                   <span className="font-mono text-3xl font-bold tabular-nums text-violet-950">
                     {progressPercentage.toFixed(0)}%
                   </span>
-                  <span className="text-xs text-violet-800">{t.progress.funded}</span>
+                  <span className="text-xs text-violet-800">
+                    {t.progress.funded}
+                  </span>
                 </div>
               </div>
 
@@ -217,10 +352,11 @@ export default function DashboardClient({
               {/* Progress footnotes */}
               <div className="flex items-center justify-between gap-4 text-xs text-violet-800">
                 <span className="font-mono tabular-nums">
-                  {formatCurrency(totalReceived)} {t.progress.funded}
+                  {formatDisplayCurrency(totalReceived)} {t.progress.funded}
                 </span>
                 <span className="font-mono tabular-nums">
-                  {formatCurrency(remainingToTarget)} {t.progress.remaining}
+                  {formatDisplayCurrency(remainingToTarget)}{" "}
+                  {t.progress.remaining}
                 </span>
               </div>
             </div>
@@ -234,19 +370,19 @@ export default function DashboardClient({
         >
           <SummaryCard
             title={t.summary.totalReceived}
-            value={formatCurrency(summary.total_received_base)}
+            value={formatDisplayCurrency(summary.total_received_base)}
           />
           <SummaryCard
             title={t.summary.totalSpent}
-            value={formatCurrency(summary.total_spent_base)}
+            value={formatDisplayCurrency(summary.total_spent_base)}
           />
           <SummaryCard
             title={t.summary.remainingBalance}
-            value={formatCurrency(summary.remaining_balance_base)}
+            value={formatDisplayCurrency(summary.remaining_balance_base)}
           />
           <SummaryCard
             title={t.summary.unallocatedBalance}
-            value={formatCurrency(summary.unallocated_balance_base)}
+            value={formatDisplayCurrency(summary.unallocated_balance_base)}
           />
         </section>
 
@@ -256,13 +392,16 @@ export default function DashboardClient({
           className="grid gap-6 xl:grid-cols-2"
         >
           <SectionCard title={t.sections.expensesByCategory}>
-            <ExpenseCategoryChart data={expenseByCategory} />
+            <ExpenseCategoryChart
+              data={convertedExpenseByCategory}
+              currency={displayCurrency}
+            />
           </SectionCard>
 
           <SectionCard title={t.sections.budgetVsSpent}>
             <BudgetVsSpentChart
-              data={budgetVsSpent}
-              currency={BASE_CURRENCY}
+              data={convertedBudgetVsSpent}
+              currency={displayCurrency}
               labels={{
                 budget: t.charts.budget,
                 spent: t.charts.spent,
@@ -281,7 +420,10 @@ export default function DashboardClient({
             {/* Mobile stacked rows */}
             <div className="divide-y divide-border sm:hidden">
               {donations.map((d) => (
-                <div key={d.donation_id} className="flex items-center justify-between gap-3 py-3.5">
+                <div
+                  key={d.donation_id}
+                  className="flex items-center justify-between gap-3 py-3.5"
+                >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">
                       {d.donor_display_name}
@@ -290,13 +432,13 @@ export default function DashboardClient({
                       {formatDate(d.received_date)}
                       {d.currency_code !== BASE_CURRENCY && (
                         <span className="ml-1.5 font-mono">
-                          · {formatCurrency(d.original_amount, d.currency_code)}
+                          - {formatCurrency(d.original_amount, d.currency_code)}
                         </span>
                       )}
                     </p>
                   </div>
                   <p className="shrink-0 font-mono text-sm font-medium tabular-nums text-foreground">
-                    {formatCurrency(d.base_currency_amount)}
+                    {formatDisplayCurrency(d.base_currency_amount)}
                   </p>
                 </div>
               ))}
@@ -307,30 +449,49 @@ export default function DashboardClient({
               <table className="w-full min-w-[440px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th scope="col" className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
+                    <th
+                      scope="col"
+                      className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
                       {t.table.date}
                     </th>
-                    <th scope="col" className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
+                    <th
+                      scope="col"
+                      className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
                       {t.table.donor}
                     </th>
-                    <th scope="col" className="pb-3 pr-5 text-right text-xs font-semibold uppercase tracking-wider text-muted">
+                    <th
+                      scope="col"
+                      className="pb-3 pr-5 text-right text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
                       {t.table.original}
                     </th>
-                    <th scope="col" className="pb-3 text-right text-xs font-semibold uppercase tracking-wider text-muted">
+                    <th
+                      scope="col"
+                      className="pb-3 text-right text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
                       {t.table.base}
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {donations.map((d) => (
-                    <tr key={d.donation_id} className="transition-colors duration-150 hover:bg-background">
-                      <td className="py-3.5 pr-5 text-sm text-muted">{formatDate(d.received_date)}</td>
-                      <td className="py-3.5 pr-5 text-sm font-medium text-foreground">{d.donor_display_name}</td>
+                    <tr
+                      key={d.donation_id}
+                      className="transition-colors duration-150 hover:bg-background"
+                    >
+                      <td className="py-3.5 pr-5 text-sm text-muted">
+                        {formatDate(d.received_date)}
+                      </td>
+                      <td className="py-3.5 pr-5 text-sm font-medium text-foreground">
+                        {d.donor_display_name}
+                      </td>
                       <td className="py-3.5 pr-5 text-right font-mono text-sm tabular-nums text-foreground">
                         {formatCurrency(d.original_amount, d.currency_code)}
                       </td>
                       <td className="py-3.5 text-right font-mono text-sm font-medium tabular-nums text-foreground">
-                        {formatCurrency(d.base_currency_amount)}
+                        {formatDisplayCurrency(d.base_currency_amount)}
                       </td>
                     </tr>
                   ))}
@@ -344,17 +505,20 @@ export default function DashboardClient({
             {/* Mobile stacked rows */}
             <div className="divide-y divide-border sm:hidden">
               {expenses.map((e) => (
-                <div key={e.expense_id} className="flex items-center justify-between gap-3 py-3.5">
+                <div
+                  key={e.expense_id}
+                  className="flex items-center justify-between gap-3 py-3.5"
+                >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">
                       {e.expense_description || e.category_name}
                     </p>
                     <p className="mt-0.5 text-xs text-muted">
-                      {e.category_name} · {formatDate(e.expense_date)}
+                      {e.category_name} - {formatDate(e.expense_date)}
                     </p>
                   </div>
                   <p className="shrink-0 font-mono text-sm font-medium tabular-nums text-foreground">
-                    {formatCurrency(e.base_currency_amount)}
+                    {formatDisplayCurrency(e.base_currency_amount)}
                   </p>
                 </div>
               ))}
@@ -365,28 +529,49 @@ export default function DashboardClient({
               <table className="w-full min-w-[440px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th scope="col" className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
+                    <th
+                      scope="col"
+                      className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
                       {t.table.date}
                     </th>
-                    <th scope="col" className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
+                    <th
+                      scope="col"
+                      className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
                       {t.table.category}
                     </th>
-                    <th scope="col" className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted">
+                    <th
+                      scope="col"
+                      className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
                       {t.table.description}
                     </th>
-                    <th scope="col" className="pb-3 text-right text-xs font-semibold uppercase tracking-wider text-muted">
+                    <th
+                      scope="col"
+                      className="pb-3 text-right text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
                       {t.table.base}
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {expenses.map((e) => (
-                    <tr key={e.expense_id} className="transition-colors duration-150 hover:bg-background">
-                      <td className="py-3.5 pr-5 text-sm text-muted">{formatDate(e.expense_date)}</td>
-                      <td className="py-3.5 pr-5 text-sm text-foreground">{e.category_name}</td>
-                      <td className="py-3.5 pr-5 text-sm text-muted">{e.expense_description}</td>
+                    <tr
+                      key={e.expense_id}
+                      className="transition-colors duration-150 hover:bg-background"
+                    >
+                      <td className="py-3.5 pr-5 text-sm text-muted">
+                        {formatDate(e.expense_date)}
+                      </td>
+                      <td className="py-3.5 pr-5 text-sm text-foreground">
+                        {e.category_name}
+                      </td>
+                      <td className="py-3.5 pr-5 text-sm text-muted">
+                        {e.expense_description}
+                      </td>
                       <td className="py-3.5 text-right font-mono text-sm font-medium tabular-nums text-foreground">
-                        {formatCurrency(e.base_currency_amount)}
+                        {formatDisplayCurrency(e.base_currency_amount)}
                       </td>
                     </tr>
                   ))}
@@ -398,9 +583,20 @@ export default function DashboardClient({
 
         {/* Footer */}
         <footer className="pb-6 text-center">
-          <p className="text-xs text-muted">
-            {t.footer.note.replace("{currency}", BASE_CURRENCY)}
-          </p>
+          <div className="space-y-1">
+            {currencyStatus === "loading" && (
+              <p className="text-xs text-muted">{t.currency.loading}</p>
+            )}
+            {currencyStatus === "error" && (
+              <p className="text-xs text-warning">{t.currency.unavailable}</p>
+            )}
+            <p className="text-xs text-muted">{rateNote}</p>
+            {displayCurrency !== BASE_CURRENCY && (
+              <p className="text-[11px] text-muted">
+                {t.currency.sourcePrefix}: {exchangeRates.source}
+              </p>
+            )}
+          </div>
         </footer>
       </div>
     </main>

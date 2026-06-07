@@ -1,7 +1,11 @@
-const BASE_CURRENCY = "AUD";
+import { BASE_CURRENCY, type DisplayCurrency } from "@/lib/currency";
 
-export function formatCurrency(value: number, currency = BASE_CURRENCY): string {
-  return new Intl.NumberFormat("en-AU", {
+export function formatCurrency(
+  value: number,
+  currency: DisplayCurrency | string = BASE_CURRENCY,
+  locale = "en-AU"
+): string {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
     maximumFractionDigits: 2,
