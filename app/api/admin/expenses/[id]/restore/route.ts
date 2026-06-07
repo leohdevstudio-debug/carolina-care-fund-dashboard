@@ -1,4 +1,5 @@
 import { requireAdminApiSession } from "@/lib/admin/auth";
+import { formatAdminRouteError } from "@/lib/admin/adminDataError";
 import { restoreAdminExpense } from "@/services/admin/expenses";
 
 function parseExpenseId(id: string): number | null {
@@ -9,7 +10,7 @@ function parseExpenseId(id: string): number | null {
 
 function errorResponse(error: unknown, fallback: string): Response {
   return Response.json(
-    { error: error instanceof Error ? error.message : fallback },
+    { error: formatAdminRouteError(error, fallback) },
     { status: 400 }
   );
 }

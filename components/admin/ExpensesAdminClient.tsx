@@ -7,6 +7,7 @@ import type {
 } from "@/services/admin/expenses";
 
 type Props = {
+  initialError?: string;
   initialExpenses: AdminExpenseRow[];
 };
 
@@ -47,14 +48,17 @@ async function readJsonError(response: Response, fallback: string) {
   return body?.error ?? fallback;
 }
 
-export default function ExpensesAdminClient({ initialExpenses }: Props) {
+export default function ExpensesAdminClient({
+  initialError = "",
+  initialExpenses,
+}: Props) {
   const [expenses, setExpenses] = useState(initialExpenses);
   const [status, setStatus] = useState<AdminExpenseStatus>("active");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<AdminExpenseRow | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
