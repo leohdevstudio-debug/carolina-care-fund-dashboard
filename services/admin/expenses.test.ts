@@ -89,7 +89,7 @@ describe("admin expense service", () => {
 
     expect(adminFetchMock).toHaveBeenNthCalledWith(
       1,
-      "expenses",
+      "expense",
       "select=*",
       expect.objectContaining({
         body: expect.objectContaining({
@@ -110,7 +110,7 @@ describe("admin expense service", () => {
         body: expect.objectContaining({
           p_action: "create",
           p_entity_id: "7",
-          p_entity_table: "expenses",
+          p_entity_table: "expense",
         }),
       })
     );

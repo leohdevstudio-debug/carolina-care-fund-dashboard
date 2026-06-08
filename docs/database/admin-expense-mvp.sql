@@ -30,9 +30,7 @@ on fund.admin_audit_log
 for select
 using (false);
 
-alter table if exists fund.expenses
-  add column if not exists created_at timestamptz not null default now(),
-  add column if not exists updated_at timestamptz not null default now(),
+alter table if exists fund.expense
   add column if not exists deleted_at timestamptz,
   add column if not exists deleted_reason text,
   add column if not exists deleted_by text,
@@ -60,14 +58,14 @@ select
   e.exchange_rate_date,
   e.exchange_rate_source,
   e.exchange_rate_fetched_at,
-  e.created_at,
-  e.updated_at,
+  e.created_on as created_at,
+  e.updated_on as updated_at,
   e.deleted_at,
   e.deleted_reason,
   e.deleted_by
-from fund.expenses e
-join fund.campaigns c on c.campaign_id = e.campaign_id
-join fund.expense_categories ec
+from fund.expense e
+join fund.campaign c on c.campaign_id = e.campaign_id
+join fund.expense_category ec
   on ec.expense_category_id = e.expense_category_id;
 
 create or replace function fund.admin_insert_audit_log(
@@ -110,7 +108,9 @@ end;
 $$;
 
 grant select on fund.v_admin_expense to service_role;
+grant select, insert, update on fund.expense to service_role;
 grant insert on fund.admin_audit_log to service_role;
+grant usage, select on all sequences in schema fund to service_role;
 grant execute on function fund.admin_insert_audit_log(
   text,
   text,
@@ -120,5 +120,129 @@ grant execute on function fund.admin_insert_audit_log(
   text
 ) to service_role;
 
--- Public transparency views must filter deleted records with
--- `where deleted_at is null` once this migration is applied.
+create or replace view fund.v_public_expense as
+select
+  e.expense_id,
+  e.campaign_id,
+  c.campaign_name,
+  e.expense_date,
+  cat.expense_category_id,
+  cat.category_name,
+  cat.category_group,
+  e.expense_description,
+  e.original_amount,
+  e.currency_code,
+  e.base_currency_amount
+from fund.expense e
+join fund.campaign c on c.campaign_id = e.campaign_id
+join fund.expense_category cat
+  on cat.expense_category_id = e.expense_category_id
+where c.is_public = true
+  and c.is_active = true
+  and e.deleted_at is null;
+
+create or replace view fund.v_public_expense_by_category as
+select
+  e.campaign_id,
+  cat.expense_category_id,
+  cat.category_name,
+  cat.category_group,
+  sum(coalesce(e.base_currency_amount, 0::numeric)) as total_spent_base
+from fund.expense e
+join fund.campaign c on c.campaign_id = e.campaign_id
+join fund.expense_category cat
+  on cat.expense_category_id = e.expense_category_id
+where c.is_public = true
+  and c.is_active = true
+  and e.deleted_at is null
+group by
+  e.campaign_id,
+  cat.expense_category_id,
+  cat.category_name,
+  cat.category_group;
+
+create or replace view fund.v_public_budget_vs_spent as
+select
+  b.campaign_id,
+  cat.expense_category_id,
+  cat.category_name,
+  cat.category_group,
+  sum(coalesce(b.base_currency_amount, 0::numeric)) as total_budget_base,
+  coalesce(exp.total_spent_base, 0::numeric) as total_spent_base,
+  (
+    sum(coalesce(b.base_currency_amount, 0::numeric)) -
+    coalesce(exp.total_spent_base, 0::numeric)
+  ) as variance_base
+from fund.budget b
+join fund.campaign c on c.campaign_id = b.campaign_id
+join fund.expense_category cat
+  on cat.expense_category_id = b.expense_category_id
+left join (
+  select
+    e.campaign_id,
+    e.expense_category_id,
+    sum(coalesce(e.base_currency_amount, 0::numeric)) as total_spent_base
+  from fund.expense e
+  where e.deleted_at is null
+  group by e.campaign_id, e.expense_category_id
+) exp
+  on exp.campaign_id = b.campaign_id
+  and exp.expense_category_id = b.expense_category_id
+where c.is_public = true
+  and c.is_active = true
+group by
+  b.campaign_id,
+  cat.expense_category_id,
+  cat.category_name,
+  cat.category_group,
+  exp.total_spent_base;
+
+create or replace view fund.v_public_campaign_summary as
+select
+  c.campaign_id,
+  c.campaign_name,
+  c.beneficiary_name,
+  c.target_amount,
+  c.target_currency_code,
+  coalesce(don.total_received_base, 0::numeric) as total_received_base,
+  coalesce(alloc.total_allocated_base, 0::numeric) as total_allocated_base,
+  coalesce(exp.total_spent_base, 0::numeric) as total_spent_base,
+  (
+    coalesce(don.total_received_base, 0::numeric) -
+    coalesce(exp.total_spent_base, 0::numeric)
+  ) as remaining_balance_base,
+  (
+    coalesce(don.total_received_base, 0::numeric) -
+    coalesce(alloc.total_allocated_base, 0::numeric)
+  ) as unallocated_balance_base
+from fund.campaign c
+left join (
+  select
+    d.campaign_id,
+    sum(coalesce(d.base_currency_amount, 0::numeric)) as total_received_base
+  from fund.donation d
+  where d.is_confirmed = true
+  group by d.campaign_id
+) don on don.campaign_id = c.campaign_id
+left join (
+  select
+    fa.campaign_id,
+    sum(coalesce(fa.base_currency_amount, 0::numeric)) as total_allocated_base
+  from fund.fund_allocation fa
+  group by fa.campaign_id
+) alloc on alloc.campaign_id = c.campaign_id
+left join (
+  select
+    e.campaign_id,
+    sum(coalesce(e.base_currency_amount, 0::numeric)) as total_spent_base
+  from fund.expense e
+  where e.deleted_at is null
+  group by e.campaign_id
+) exp on exp.campaign_id = c.campaign_id
+where c.is_public = true
+  and c.is_active = true;
+
+grant select on fund.v_public_expense to anon;
+grant select on fund.v_public_expense_by_category to anon;
+grant select on fund.v_public_budget_vs_spent to anon;
+grant select on fund.v_public_campaign_summary to anon;

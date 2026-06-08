@@ -31,7 +31,7 @@ export function formatAdminDataError(error: unknown): string {
   if (
     message.includes("v_admin_expense") ||
     message.includes("admin_insert_audit_log") ||
-    message.includes("fund.expenses")
+    message.includes("fund.expense")
   ) {
     return MISSING_ADMIN_SQL_MESSAGE;
   }

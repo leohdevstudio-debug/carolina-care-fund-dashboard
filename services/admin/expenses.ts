@@ -110,7 +110,7 @@ async function writeAudit(
     body: {
       p_action: action,
       p_entity_id: entityId,
-      p_entity_table: "expenses",
+      p_entity_table: "expense",
       p_new_data: newData,
       p_old_data: oldData,
       p_reason: reason ?? null,
@@ -131,7 +131,7 @@ export async function createAdminExpense(
   input: AdminExpenseInput
 ): Promise<AdminExpenseRow> {
   const rates = await getCurrentExchangeRates();
-  const rows = await adminFetch<AdminExpenseRow[]>("expenses", "select=*", {
+  const rows = await adminFetch<AdminExpenseRow[]>("expense", "select=*", {
     method: "POST",
     prefer: "return=representation",
     body: {
@@ -147,10 +147,12 @@ export async function createAdminExpense(
       exchange_rate_date: input.expenseDate,
       exchange_rate_fetched_at: rates.fetchedAt,
       exchange_rate_source: rates.source,
+      created_by: "admin",
       expense_category_id: input.expenseCategoryId,
       expense_date: input.expenseDate,
       expense_description: input.expenseDescription,
       original_amount: input.originalAmount,
+      updated_by: "admin",
     },
   });
   const row = requireRow(rows, "Expense was not created");
@@ -177,7 +179,7 @@ export async function updateAdminExpense(
     previous.currency_code !== input.currencyCode;
   const rates = needsRateSnapshot ? await getCurrentExchangeRates() : null;
   const rows = await adminFetch<AdminExpenseRow[]>(
-    "expenses",
+    "expense",
     `expense_id=eq.${expenseId}&select=*`,
     {
       method: "PATCH",
@@ -189,7 +191,8 @@ export async function updateAdminExpense(
         expense_date: input.expenseDate,
         expense_description: input.expenseDescription,
         original_amount: input.originalAmount,
-        updated_at: new Date().toISOString(),
+        updated_by: "admin",
+        updated_on: new Date().toISOString(),
         ...(rates
           ? {
               aud_to_twd_rate: rates.rates.TWD,
@@ -227,7 +230,7 @@ export async function softDeleteAdminExpense(
   );
   const deletedAt = new Date().toISOString();
   const rows = await adminFetch<AdminExpenseRow[]>(
-    "expenses",
+    "expense",
     `expense_id=eq.${expenseId}&select=*`,
     {
       method: "PATCH",
@@ -236,7 +239,8 @@ export async function softDeleteAdminExpense(
         deleted_at: deletedAt,
         deleted_by: "admin",
         deleted_reason: reason,
-        updated_at: deletedAt,
+        updated_by: "admin",
+        updated_on: deletedAt,
       },
     }
   );
@@ -258,7 +262,7 @@ export async function restoreAdminExpense(
     "Expense was not found"
   );
   const rows = await adminFetch<AdminExpenseRow[]>(
-    "expenses",
+    "expense",
     `expense_id=eq.${expenseId}&select=*`,
     {
       method: "PATCH",
@@ -267,7 +271,8 @@ export async function restoreAdminExpense(
         deleted_at: null,
         deleted_by: null,
         deleted_reason: null,
-        updated_at: new Date().toISOString(),
+        updated_by: "admin",
+        updated_on: new Date().toISOString(),
       },
     }
   );
