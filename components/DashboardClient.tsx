@@ -164,6 +164,41 @@ export default function DashboardClient({
   const formatDisplayCurrency = (value: number | null | undefined) =>
     formatCurrency(displayAmount(value), displayCurrency, displayLocale);
 
+  // 20260608_2305_01_FixDisplayedDonationTotals.tsx
+
+  // Return the original donation amount when it already matches the selected display currency.
+  // Otherwise, convert the base AUD amount to the selected display currency.
+  const getDonationDisplayAmount = (donation: PublicDonation) => {
+    if (donation.currency_code === displayCurrency) {
+      return Number(donation.original_amount ?? 0);
+    }
+
+    return displayAmount(donation.base_currency_amount);
+  };
+
+  // Format a donation using the original currency amount when possible.
+  const formatDonationDisplayCurrency = (donation: PublicDonation) => {
+    if (donation.currency_code === displayCurrency) {
+      return formatCurrency(
+        donation.original_amount,
+        donation.currency_code,
+        displayLocale
+      );
+    }
+
+    return formatDisplayCurrency(donation.base_currency_amount);
+  };
+
+  // Calculate displayed totals using the donation original amount when it matches the selected currency.
+  const displayedTotalReceived = donations.reduce(
+    (total, donation) => total + getDonationDisplayAmount(donation),
+    0
+  );
+
+  const displayedTotalSpent = displayAmount(summary.total_spent_base);
+  const displayedRemainingBalance =
+    displayedTotalReceived - displayedTotalSpent;
+
   const convertedExpenseByCategory = expenseByCategory.map((item) => ({
     ...item,
     total_spent_base: displayAmount(item.total_spent_base),
@@ -370,15 +405,27 @@ export default function DashboardClient({
         >
           <SummaryCard
             title={t.summary.totalReceived}
-            value={formatDisplayCurrency(summary.total_received_base)}
+            value={formatCurrency(
+              displayedTotalReceived,
+              displayCurrency,
+              displayLocale
+            )}
           />
           <SummaryCard
             title={t.summary.totalSpent}
-            value={formatDisplayCurrency(summary.total_spent_base)}
+            value={formatCurrency(
+              displayedTotalSpent,
+              displayCurrency,
+              displayLocale
+            )}
           />
           <SummaryCard
             title={t.summary.remainingBalance}
-            value={formatDisplayCurrency(summary.remaining_balance_base)}
+            value={formatCurrency(
+              displayedRemainingBalance,
+              displayCurrency,
+              displayLocale
+            )}
           />
           <SummaryCard
             title={t.summary.unallocatedBalance}
@@ -438,7 +485,7 @@ export default function DashboardClient({
                     </p>
                   </div>
                   <p className="shrink-0 font-mono text-sm font-medium tabular-nums text-foreground">
-                    {formatDisplayCurrency(d.base_currency_amount)}
+                    {formatDonationDisplayCurrency(d)}
                   </p>
                 </div>
               ))}
@@ -491,7 +538,7 @@ export default function DashboardClient({
                         {formatCurrency(d.original_amount, d.currency_code)}
                       </td>
                       <td className="py-3.5 text-right font-mono text-sm font-medium tabular-nums text-foreground">
-                        {formatDisplayCurrency(d.base_currency_amount)}
+                        {formatDonationDisplayCurrency(d)}
                       </td>
                     </tr>
                   ))}
