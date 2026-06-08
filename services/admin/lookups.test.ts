@@ -88,7 +88,7 @@ describe("admin lookup service", () => {
     expect(adminFetchMock).toHaveBeenNthCalledWith(
       2,
       "donor",
-      "select=donor_id%2Cdisplay_name%2Cfirst_name%2Clast_name%2Ccountry_name%2Cis_anonymous_publicly&order=display_name.asc"
+      "select=donor_id%2Cdisplay_name%2Cfirst_name%2Clast_name%2Ccountry_name%2Cis_anonymous_publicly&deleted_at=is.null&order=display_name.asc"
     );
   });
 });

@@ -31,6 +31,7 @@ export function formatAdminDataError(error: unknown): string {
   if (
     message.includes("v_admin_expense") ||
     message.includes("v_admin_donation") ||
+    message.includes("v_admin_donor") ||
     message.includes("admin_insert_audit_log") ||
     message.includes("fund.donation") ||
     message.includes("fund.expense") ||

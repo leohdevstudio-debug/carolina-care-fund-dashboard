@@ -44,6 +44,15 @@ describe("formatAdminDataError", () => {
     expect(formatAdminDataError(error)).toContain("admin-expense-mvp.sql");
   });
 
+  it("explains missing donor admin database SQL", () => {
+    const error = new SupabaseAdminRequestError(
+      '{"message":"Could not find the table fund.v_admin_donor"}',
+      404
+    );
+
+    expect(formatAdminDataError(error)).toContain("admin-expense-mvp.sql");
+  });
+
   it("explains missing schema usage grants", () => {
     const error = new SupabaseAdminRequestError(
       '{"code":"42501","message":"permission denied for schema fund"}',

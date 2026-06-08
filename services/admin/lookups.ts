@@ -54,6 +54,7 @@ function donorQuery(): string {
     "select",
     "donor_id,display_name,first_name,last_name,country_name,is_anonymous_publicly"
   );
+  query.set("deleted_at", "is.null");
   query.set("order", "display_name.asc");
 
   return query.toString();

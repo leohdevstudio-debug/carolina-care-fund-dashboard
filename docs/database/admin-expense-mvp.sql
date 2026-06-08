@@ -50,6 +50,11 @@ alter table if exists fund.donation
   add column if not exists exchange_rate_source text,
   add column if not exists exchange_rate_fetched_at timestamptz;
 
+alter table if exists fund.donor
+  add column if not exists deleted_at timestamptz,
+  add column if not exists deleted_reason text,
+  add column if not exists deleted_by text;
+
 alter table if exists fund.expense_category
   add column if not exists deleted_at timestamptz,
   add column if not exists deleted_reason text,
@@ -117,6 +122,25 @@ from fund.donation d
 join fund.campaign c on c.campaign_id = d.campaign_id
 left join fund.donor donor on donor.donor_id = d.donor_id;
 
+create or replace view fund.v_admin_donor as
+select
+  d.donor_id,
+  d.donor_type,
+  d.display_name,
+  d.first_name,
+  d.last_name,
+  d.country_name,
+  d.email_address,
+  d.phone_number,
+  d.is_anonymous_publicly,
+  d.notes,
+  d.created_on as created_at,
+  d.updated_on as updated_at,
+  d.deleted_at,
+  d.deleted_reason,
+  d.deleted_by
+from fund.donor d;
+
 create or replace view fund.v_admin_expense_category as
 select
   ec.expense_category_id,
@@ -171,10 +195,11 @@ $$;
 grant usage on schema fund to service_role;
 grant select on fund.campaign to service_role;
 grant select on fund.currency to service_role;
-grant select on fund.donor to service_role;
+grant select, insert, update on fund.donor to service_role;
 grant select, insert, update on fund.donation to service_role;
 grant select, insert, update on fund.expense_category to service_role;
 grant select on fund.v_admin_donation to service_role;
+grant select on fund.v_admin_donor to service_role;
 grant select on fund.v_admin_expense to service_role;
 grant select on fund.v_admin_expense_category to service_role;
 grant select, insert, update on fund.expense to service_role;
@@ -335,7 +360,7 @@ select
       nullif(d.sender_name_as_received, ''),
       'Anonymous'
     )
-  end as donor_display_name
+  end::character varying as donor_display_name
 from fund.donation d
 join fund.campaign c on c.campaign_id = d.campaign_id
 left join fund.donor donor on donor.donor_id = d.donor_id
