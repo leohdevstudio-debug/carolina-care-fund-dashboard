@@ -40,6 +40,16 @@ alter table if exists fund.expense
   add column if not exists exchange_rate_source text,
   add column if not exists exchange_rate_fetched_at timestamptz;
 
+alter table if exists fund.donation
+  add column if not exists deleted_at timestamptz,
+  add column if not exists deleted_reason text,
+  add column if not exists deleted_by text,
+  add column if not exists aud_to_usd_rate numeric(18, 8),
+  add column if not exists aud_to_twd_rate numeric(18, 8),
+  add column if not exists exchange_rate_date date,
+  add column if not exists exchange_rate_source text,
+  add column if not exists exchange_rate_fetched_at timestamptz;
+
 alter table if exists fund.expense_category
   add column if not exists deleted_at timestamptz,
   add column if not exists deleted_reason text,
@@ -72,6 +82,40 @@ from fund.expense e
 join fund.campaign c on c.campaign_id = e.campaign_id
 join fund.expense_category ec
   on ec.expense_category_id = e.expense_category_id;
+
+create or replace view fund.v_admin_donation as
+select
+  d.donation_id,
+  d.campaign_id,
+  c.campaign_name,
+  d.donor_id,
+  donor.display_name as donor_display_name,
+  donor.is_anonymous_publicly,
+  d.received_date,
+  d.original_amount,
+  d.currency_code,
+  d.exchange_rate_to_base,
+  d.base_currency_amount,
+  d.aud_to_usd_rate,
+  d.aud_to_twd_rate,
+  d.exchange_rate_date,
+  d.exchange_rate_source,
+  d.exchange_rate_fetched_at,
+  d.payment_method,
+  d.transaction_reference,
+  d.sender_name_as_received,
+  d.sender_country_name,
+  d.purpose_note,
+  d.is_confirmed,
+  d.received_by,
+  d.created_on as created_at,
+  d.updated_on as updated_at,
+  d.deleted_at,
+  d.deleted_reason,
+  d.deleted_by
+from fund.donation d
+join fund.campaign c on c.campaign_id = d.campaign_id
+left join fund.donor donor on donor.donor_id = d.donor_id;
 
 create or replace view fund.v_admin_expense_category as
 select
@@ -127,7 +171,10 @@ $$;
 grant usage on schema fund to service_role;
 grant select on fund.campaign to service_role;
 grant select on fund.currency to service_role;
+grant select on fund.donor to service_role;
+grant select, insert, update on fund.donation to service_role;
 grant select, insert, update on fund.expense_category to service_role;
+grant select on fund.v_admin_donation to service_role;
 grant select on fund.v_admin_expense to service_role;
 grant select on fund.v_admin_expense_category to service_role;
 grant select, insert, update on fund.expense to service_role;
@@ -247,6 +294,7 @@ left join (
     sum(coalesce(d.base_currency_amount, 0::numeric)) as total_received_base
   from fund.donation d
   where d.is_confirmed = true
+    and d.deleted_at is null
   group by d.campaign_id
 ) don on don.campaign_id = c.campaign_id
 left join (
@@ -270,7 +318,34 @@ left join (
 where c.is_public = true
   and c.is_active = true;
 
+create or replace view fund.v_public_donation as
+select
+  d.donation_id,
+  d.campaign_id,
+  c.campaign_name,
+  d.received_date,
+  d.original_amount,
+  d.currency_code,
+  d.base_currency_amount,
+  case
+    when coalesce(donor.is_anonymous_publicly, false) = true then 'Anonymous'
+    else coalesce(
+      nullif(donor.display_name, ''),
+      nullif(trim(concat_ws(' ', donor.first_name, donor.last_name)), ''),
+      nullif(d.sender_name_as_received, ''),
+      'Anonymous'
+    )
+  end as donor_display_name
+from fund.donation d
+join fund.campaign c on c.campaign_id = d.campaign_id
+left join fund.donor donor on donor.donor_id = d.donor_id
+where c.is_public = true
+  and c.is_active = true
+  and d.is_confirmed = true
+  and d.deleted_at is null;
+
 grant select on fund.v_public_expense to anon;
 grant select on fund.v_public_expense_by_category to anon;
 grant select on fund.v_public_budget_vs_spent to anon;
 grant select on fund.v_public_campaign_summary to anon;
+grant select on fund.v_public_donation to anon;

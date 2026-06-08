@@ -12,9 +12,23 @@ export type AdminExpenseCategoryOption = {
   category_group: string;
 };
 
+export type AdminDonorOption = {
+  donor_id: number;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  country_name: string | null;
+  is_anonymous_publicly: boolean;
+};
+
 export type AdminExpenseLookups = {
   campaigns: AdminCampaignOption[];
   categories: AdminExpenseCategoryOption[];
+};
+
+export type AdminDonationLookups = {
+  campaigns: AdminCampaignOption[];
+  donors: AdminDonorOption[];
 };
 
 function campaignQuery(): string {
@@ -34,6 +48,17 @@ function categoryQuery(): string {
   return query.toString();
 }
 
+function donorQuery(): string {
+  const query = new URLSearchParams();
+  query.set(
+    "select",
+    "donor_id,display_name,first_name,last_name,country_name,is_anonymous_publicly"
+  );
+  query.set("order", "display_name.asc");
+
+  return query.toString();
+}
+
 export async function listAdminExpenseLookups(): Promise<AdminExpenseLookups> {
   const [campaigns, categories] = await Promise.all([
     adminFetch<AdminCampaignOption[]>("campaign", campaignQuery()),
@@ -46,5 +71,17 @@ export async function listAdminExpenseLookups(): Promise<AdminExpenseLookups> {
   return {
     campaigns,
     categories,
+  };
+}
+
+export async function listAdminDonationLookups(): Promise<AdminDonationLookups> {
+  const [campaigns, donors] = await Promise.all([
+    adminFetch<AdminCampaignOption[]>("campaign", campaignQuery()),
+    adminFetch<AdminDonorOption[]>("donor", donorQuery()),
+  ]);
+
+  return {
+    campaigns,
+    donors,
   };
 }
