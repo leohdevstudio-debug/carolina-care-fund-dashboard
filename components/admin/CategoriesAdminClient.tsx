@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { buildCategoryGroupOptions } from "@/lib/admin/categoryGroupOptions";
 import type {
   AdminCategoryRow,
   AdminCategoryStatus,
@@ -20,6 +21,7 @@ const emptyForm: FormState = {
   categoryGroup: "",
   categoryName: "",
 };
+const CUSTOM_GROUP_VALUE = "__custom_group__";
 
 function rowToForm(row: AdminCategoryRow): FormState {
   return {
@@ -46,6 +48,7 @@ export default function CategoriesAdminClient({
   const [editing, setEditing] = useState<AdminCategoryRow | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [isCustomGroup, setIsCustomGroup] = useState(false);
   const [error, setError] = useState(initialError);
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -61,6 +64,17 @@ export default function CategoriesAdminClient({
       ),
     [categories]
   );
+  const categoryGroupOptions = useMemo(
+    () =>
+      buildCategoryGroupOptions(
+        categories.map((category) => category.category_group),
+        editing?.category_group
+      ),
+    [categories, editing?.category_group]
+  );
+  const groupSelectValue = isCustomGroup
+    ? CUSTOM_GROUP_VALUE
+    : form.categoryGroup;
 
   async function refresh(nextStatus = status, nextSearch = search) {
     setIsRefreshing(true);
@@ -85,6 +99,7 @@ export default function CategoriesAdminClient({
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
+    setIsCustomGroup(false);
     setError("");
     setIsDrawerOpen(true);
   }
@@ -92,6 +107,7 @@ export default function CategoriesAdminClient({
   function openEdit(row: AdminCategoryRow) {
     setEditing(row);
     setForm(rowToForm(row));
+    setIsCustomGroup(false);
     setError("");
     setIsDrawerOpen(true);
   }
@@ -100,6 +116,7 @@ export default function CategoriesAdminClient({
     setIsDrawerOpen(false);
     setEditing(null);
     setForm(emptyForm);
+    setIsCustomGroup(false);
     if (clearError) {
       setError("");
     }
@@ -374,18 +391,55 @@ export default function CategoriesAdminClient({
 
               <label className="flex flex-col gap-1 text-sm font-medium">
                 Group
-                <input
-                  className="rounded-md border border-border px-3 py-2 text-sm"
-                  onChange={(event) =>
+                <select
+                  className="rounded-md border border-border bg-white px-3 py-2 text-sm"
+                  onChange={(event) => {
+                    const value = event.target.value;
+
+                    if (value === CUSTOM_GROUP_VALUE) {
+                      setIsCustomGroup(true);
+                      setForm((current) => ({
+                        ...current,
+                        categoryGroup: "",
+                      }));
+                      return;
+                    }
+
+                    setIsCustomGroup(false);
                     setForm((current) => ({
                       ...current,
-                      categoryGroup: event.target.value,
-                    }))
-                  }
+                      categoryGroup: value,
+                    }));
+                  }}
                   required
-                  value={form.categoryGroup}
-                />
+                  value={groupSelectValue}
+                >
+                  <option value="">Select group</option>
+                  {categoryGroupOptions.map((group) => (
+                    <option key={group} value={group}>
+                      {group}
+                    </option>
+                  ))}
+                  <option value={CUSTOM_GROUP_VALUE}>New group...</option>
+                </select>
               </label>
+
+              {isCustomGroup ? (
+                <label className="flex flex-col gap-1 text-sm font-medium">
+                  New group name
+                  <input
+                    className="rounded-md border border-border px-3 py-2 text-sm"
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        categoryGroup: event.target.value,
+                      }))
+                    }
+                    required
+                    value={form.categoryGroup}
+                  />
+                </label>
+              ) : null}
 
               <label className="flex flex-col gap-1 text-sm font-medium">
                 Name
