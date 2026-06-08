@@ -5,10 +5,12 @@ import type {
   AdminExpenseRow,
   AdminExpenseStatus,
 } from "@/services/admin/expenses";
+import type { AdminExpenseLookups } from "@/services/admin/lookups";
 
 type Props = {
   initialError?: string;
   initialExpenses: AdminExpenseRow[];
+  initialLookups: AdminExpenseLookups;
 };
 
 type FormState = {
@@ -51,6 +53,7 @@ async function readJsonError(response: Response, fallback: string) {
 export default function ExpensesAdminClient({
   initialError = "",
   initialExpenses,
+  initialLookups,
 }: Props) {
   const [expenses, setExpenses] = useState(initialExpenses);
   const [status, setStatus] = useState<AdminExpenseStatus>("active");
@@ -61,6 +64,9 @@ export default function ExpensesAdminClient({
   const [error, setError] = useState(initialError);
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [mutatingExpenseId, setMutatingExpenseId] = useState<number | null>(
+    null
+  );
 
   const activeTotal = useMemo(
     () =>
@@ -73,6 +79,8 @@ export default function ExpensesAdminClient({
       ),
     [expenses]
   );
+  const campaignOptions = initialLookups.campaigns;
+  const categoryOptions = initialLookups.categories;
 
   async function refresh(nextStatus = status, nextSearch = search) {
     setIsRefreshing(true);
@@ -108,6 +116,15 @@ export default function ExpensesAdminClient({
     setIsDrawerOpen(true);
   }
 
+  function closeDrawer({ clearError = true }: { clearError?: boolean } = {}) {
+    setIsDrawerOpen(false);
+    setEditing(null);
+    setForm(emptyForm);
+    if (clearError) {
+      setError("");
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSaving(true);
@@ -121,16 +138,23 @@ export default function ExpensesAdminClient({
       expenseDescription: form.expenseDescription,
       originalAmount: Number(form.originalAmount),
     };
-    const response = await fetch(
-      editing
-        ? `/api/admin/expenses/${editing.expense_id}`
-        : "/api/admin/expenses",
-      {
-        method: editing ? "PATCH" : "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      }
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        editing
+          ? `/api/admin/expenses/${editing.expense_id}`
+          : "/api/admin/expenses",
+        {
+          method: editing ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+    } catch {
+      setIsSaving(false);
+      setError("Unable to save expense");
+      return;
+    }
 
     setIsSaving(false);
 
@@ -140,7 +164,7 @@ export default function ExpensesAdminClient({
     }
 
     await refresh();
-    setIsDrawerOpen(false);
+    closeDrawer({ clearError: false });
   }
 
   async function softDelete(row: AdminExpenseRow) {
@@ -150,14 +174,23 @@ export default function ExpensesAdminClient({
       return;
     }
 
-    const response = await fetch(
-      `/api/admin/expenses/${row.expense_id}/soft-delete`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reason }),
-      }
-    );
+    let response: Response;
+    try {
+      setMutatingExpenseId(row.expense_id);
+      response = await fetch(
+        `/api/admin/expenses/${row.expense_id}/soft-delete`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reason }),
+        }
+      );
+    } catch {
+      setError("Unable to delete expense");
+      return;
+    } finally {
+      setMutatingExpenseId(null);
+    }
 
     if (!response.ok) {
       setError(await readJsonError(response, "Unable to delete expense"));
@@ -168,12 +201,21 @@ export default function ExpensesAdminClient({
   }
 
   async function restore(row: AdminExpenseRow) {
-    const response = await fetch(
-      `/api/admin/expenses/${row.expense_id}/restore`,
-      {
-        method: "POST",
-      }
-    );
+    let response: Response;
+    try {
+      setMutatingExpenseId(row.expense_id);
+      response = await fetch(
+        `/api/admin/expenses/${row.expense_id}/restore`,
+        {
+          method: "POST",
+        }
+      );
+    } catch {
+      setError("Unable to restore expense");
+      return;
+    } finally {
+      setMutatingExpenseId(null);
+    }
 
     if (!response.ok) {
       setError(await readJsonError(response, "Unable to restore expense"));
@@ -184,7 +226,7 @@ export default function ExpensesAdminClient({
   }
 
   return (
-    <div className="grid min-h-[calc(100vh-3rem)] grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="min-h-[calc(100vh-3rem)]">
       <section className="min-w-0">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -276,7 +318,8 @@ export default function ExpensesAdminClient({
                   </td>
                   <td className="px-3 py-2 text-right">
                     <button
-                      className="mr-3 text-primary hover:underline"
+                      className="mr-3 text-primary hover:underline disabled:opacity-60"
+                      disabled={mutatingExpenseId === row.expense_id}
                       onClick={() => openEdit(row)}
                       type="button"
                     >
@@ -284,19 +327,25 @@ export default function ExpensesAdminClient({
                     </button>
                     {row.deleted_at ? (
                       <button
-                        className="text-primary hover:underline"
+                        className="text-primary hover:underline disabled:opacity-60"
+                        disabled={mutatingExpenseId === row.expense_id}
                         onClick={() => restore(row)}
                         type="button"
                       >
-                        Restore
+                        {mutatingExpenseId === row.expense_id
+                          ? "Restoring..."
+                          : "Restore"}
                       </button>
                     ) : (
                       <button
-                        className="text-danger hover:underline"
+                        className="text-danger hover:underline disabled:opacity-60"
+                        disabled={mutatingExpenseId === row.expense_id}
                         onClick={() => softDelete(row)}
                         type="button"
                       >
-                        Delete
+                        {mutatingExpenseId === row.expense_id
+                          ? "Deleting..."
+                          : "Delete"}
                       </button>
                     )}
                   </td>
@@ -314,30 +363,69 @@ export default function ExpensesAdminClient({
         </div>
       </section>
 
-      <aside className="rounded-lg border border-border bg-surface p-5 shadow-sm">
-        {isDrawerOpen ? (
-          <form className="flex flex-col gap-4" onSubmit={submit}>
+      {isDrawerOpen ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex justify-end bg-foreground/20"
+          role="dialog"
+        >
+          <button
+            aria-label="Close expense form"
+            className="absolute inset-0 cursor-default"
+            onClick={() => closeDrawer()}
+            type="button"
+          />
+          <aside className="relative z-10 h-full w-full max-w-md overflow-y-auto border-l border-border bg-surface p-5 shadow-xl">
+            <form className="flex flex-col gap-4" onSubmit={submit}>
             <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                {editing ? "Edit expense" : "New expense"}
-              </h2>
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-lg font-semibold text-foreground">
+                  {editing ? "Edit expense" : "New expense"}
+                </h2>
+                <button
+                  className="rounded-md border border-border px-3 py-1 text-sm font-medium"
+                  onClick={() => closeDrawer()}
+                  type="button"
+                >
+                  Close
+                </button>
+              </div>
               <p className="text-sm text-muted">
                 Amount changes refresh the stored FX snapshot.
               </p>
             </div>
 
+            {error ? (
+              <p className="rounded-md border border-danger/20 bg-danger/5 px-3 py-2 text-sm text-danger">
+                {error}
+              </p>
+            ) : null}
+
             <label className="flex flex-col gap-1 text-sm font-medium">
-              Campaign ID
-              <input
-                className="rounded-md border border-border px-3 py-2 text-sm"
+              Campaign
+              <select
+                className="rounded-md border border-border bg-white px-3 py-2 text-sm"
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
                     campaignId: event.target.value,
                   }))
                 }
+                required
                 value={form.campaignId}
-              />
+              >
+                <option value="">Select campaign</option>
+                {campaignOptions.map((campaign) => (
+                  <option
+                    key={campaign.campaign_id}
+                    value={campaign.campaign_id}
+                  >
+                    {campaign.campaign_name}
+                    {campaign.is_active ? "" : " (inactive)"} (#
+                    {campaign.campaign_id})
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className="flex flex-col gap-1 text-sm font-medium">
@@ -356,17 +444,29 @@ export default function ExpensesAdminClient({
             </label>
 
             <label className="flex flex-col gap-1 text-sm font-medium">
-              Category ID
-              <input
-                className="rounded-md border border-border px-3 py-2 text-sm"
+              Category
+              <select
+                className="rounded-md border border-border bg-white px-3 py-2 text-sm"
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
                     expenseCategoryId: event.target.value,
                   }))
                 }
+                required
                 value={form.expenseCategoryId}
-              />
+              >
+                <option value="">Select category</option>
+                {categoryOptions.map((category) => (
+                  <option
+                    key={category.expense_category_id}
+                    value={category.expense_category_id}
+                  >
+                    {category.category_group} - {category.category_name} (#
+                    {category.expense_category_id})
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className="flex flex-col gap-1 text-sm font-medium">
@@ -426,19 +526,16 @@ export default function ExpensesAdminClient({
               </button>
               <button
                 className="rounded-md border border-border px-4 py-2 text-sm font-medium"
-                onClick={() => setIsDrawerOpen(false)}
+                onClick={() => closeDrawer()}
                 type="button"
               >
                 Cancel
               </button>
             </div>
           </form>
-        ) : (
-          <div className="flex h-full min-h-64 items-center justify-center text-sm text-muted">
-            Select an expense or create a new one.
-          </div>
-        )}
-      </aside>
+          </aside>
+        </div>
+      ) : null}
     </div>
   );
 }

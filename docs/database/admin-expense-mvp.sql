@@ -107,6 +107,10 @@ begin
 end;
 $$;
 
+grant usage on schema fund to service_role;
+grant select on fund.campaign to service_role;
+grant select on fund.currency to service_role;
+grant select on fund.expense_category to service_role;
 grant select on fund.v_admin_expense to service_role;
 grant select, insert, update on fund.expense to service_role;
 grant insert on fund.admin_audit_log to service_role;

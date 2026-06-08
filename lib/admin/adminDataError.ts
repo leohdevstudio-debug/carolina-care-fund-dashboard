@@ -31,7 +31,11 @@ export function formatAdminDataError(error: unknown): string {
   if (
     message.includes("v_admin_expense") ||
     message.includes("admin_insert_audit_log") ||
-    message.includes("fund.expense")
+    message.includes("fund.expense") ||
+    message.includes("permission denied for schema fund") ||
+    message.includes("permission denied for table campaign") ||
+    message.includes("permission denied for table currency") ||
+    message.includes("permission denied for table expense_category")
   ) {
     return MISSING_ADMIN_SQL_MESSAGE;
   }

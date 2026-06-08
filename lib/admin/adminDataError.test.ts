@@ -26,6 +26,24 @@ describe("formatAdminDataError", () => {
     expect(formatAdminDataError(error)).toContain("admin-expense-mvp.sql");
   });
 
+  it("explains missing schema usage grants", () => {
+    const error = new SupabaseAdminRequestError(
+      '{"code":"42501","message":"permission denied for schema fund"}',
+      403
+    );
+
+    expect(formatAdminDataError(error)).toContain("admin-expense-mvp.sql");
+  });
+
+  it("explains missing referenced table grants", () => {
+    const error = new SupabaseAdminRequestError(
+      '{"code":"42501","message":"permission denied for table currency"}',
+      403
+    );
+
+    expect(formatAdminDataError(error)).toContain("admin-expense-mvp.sql");
+  });
+
   it("returns a generic message for unknown errors", () => {
     expect(formatAdminDataError(new Error("Unexpected"))).toBe(
       "Unable to load admin expenses."
