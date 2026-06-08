@@ -28,6 +28,7 @@ function campaignQuery(): string {
 function categoryQuery(): string {
   const query = new URLSearchParams();
   query.set("select", "expense_category_id,category_name,category_group");
+  query.set("deleted_at", "is.null");
   query.set("order", "category_group.asc,category_name.asc");
 
   return query.toString();
@@ -37,7 +38,7 @@ export async function listAdminExpenseLookups(): Promise<AdminExpenseLookups> {
   const [campaigns, categories] = await Promise.all([
     adminFetch<AdminCampaignOption[]>("campaign", campaignQuery()),
     adminFetch<AdminExpenseCategoryOption[]>(
-      "expense_category",
+      "v_admin_expense_category",
       categoryQuery()
     ),
   ]);

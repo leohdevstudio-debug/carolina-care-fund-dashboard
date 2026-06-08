@@ -40,6 +40,11 @@ alter table if exists fund.expense
   add column if not exists exchange_rate_source text,
   add column if not exists exchange_rate_fetched_at timestamptz;
 
+alter table if exists fund.expense_category
+  add column if not exists deleted_at timestamptz,
+  add column if not exists deleted_reason text,
+  add column if not exists deleted_by text;
+
 create or replace view fund.v_admin_expense as
 select
   e.expense_id,
@@ -67,6 +72,18 @@ from fund.expense e
 join fund.campaign c on c.campaign_id = e.campaign_id
 join fund.expense_category ec
   on ec.expense_category_id = e.expense_category_id;
+
+create or replace view fund.v_admin_expense_category as
+select
+  ec.expense_category_id,
+  ec.category_name,
+  ec.category_group,
+  ec.created_on as created_at,
+  ec.updated_on as updated_at,
+  ec.deleted_at,
+  ec.deleted_reason,
+  ec.deleted_by
+from fund.expense_category ec;
 
 create or replace function fund.admin_insert_audit_log(
   p_entity_table text,
@@ -110,8 +127,9 @@ $$;
 grant usage on schema fund to service_role;
 grant select on fund.campaign to service_role;
 grant select on fund.currency to service_role;
-grant select on fund.expense_category to service_role;
+grant select, insert, update on fund.expense_category to service_role;
 grant select on fund.v_admin_expense to service_role;
+grant select on fund.v_admin_expense_category to service_role;
 grant select, insert, update on fund.expense to service_role;
 grant insert on fund.admin_audit_log to service_role;
 grant usage, select on all sequences in schema fund to service_role;
@@ -143,6 +161,7 @@ join fund.expense_category cat
   on cat.expense_category_id = e.expense_category_id
 where c.is_public = true
   and c.is_active = true
+  and cat.deleted_at is null
   and e.deleted_at is null;
 
 create or replace view fund.v_public_expense_by_category as
@@ -158,6 +177,7 @@ join fund.expense_category cat
   on cat.expense_category_id = e.expense_category_id
 where c.is_public = true
   and c.is_active = true
+  and cat.deleted_at is null
   and e.deleted_at is null
 group by
   e.campaign_id,
@@ -194,6 +214,7 @@ left join (
   and exp.expense_category_id = b.expense_category_id
 where c.is_public = true
   and c.is_active = true
+  and cat.deleted_at is null
 group by
   b.campaign_id,
   cat.expense_category_id,
@@ -240,7 +261,10 @@ left join (
     e.campaign_id,
     sum(coalesce(e.base_currency_amount, 0::numeric)) as total_spent_base
   from fund.expense e
+  join fund.expense_category cat
+    on cat.expense_category_id = e.expense_category_id
   where e.deleted_at is null
+    and cat.deleted_at is null
   group by e.campaign_id
 ) exp on exp.campaign_id = c.campaign_id
 where c.is_public = true

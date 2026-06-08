@@ -46,8 +46,8 @@ describe("admin lookup service", () => {
     );
     expect(adminFetchMock).toHaveBeenNthCalledWith(
       2,
-      "expense_category",
-      "select=expense_category_id%2Ccategory_name%2Ccategory_group&order=category_group.asc%2Ccategory_name.asc"
+      "v_admin_expense_category",
+      "select=expense_category_id%2Ccategory_name%2Ccategory_group&deleted_at=is.null&order=category_group.asc%2Ccategory_name.asc"
     );
   });
 });
