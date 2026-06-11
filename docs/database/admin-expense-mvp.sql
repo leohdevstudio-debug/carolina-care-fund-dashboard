@@ -55,6 +55,11 @@ alter table if exists fund.donor
   add column if not exists deleted_reason text,
   add column if not exists deleted_by text;
 
+alter table if exists fund.budget
+  add column if not exists deleted_at timestamptz,
+  add column if not exists deleted_reason text,
+  add column if not exists deleted_by text;
+
 alter table if exists fund.expense_category
   add column if not exists deleted_at timestamptz,
   add column if not exists deleted_reason text,
@@ -121,6 +126,30 @@ select
 from fund.donation d
 join fund.campaign c on c.campaign_id = d.campaign_id
 left join fund.donor donor on donor.donor_id = d.donor_id;
+
+create or replace view fund.v_admin_budget as
+select
+  b.budget_id,
+  b.campaign_id,
+  c.campaign_name,
+  b.expense_category_id,
+  ec.category_name,
+  ec.category_group,
+  b.budget_description,
+  b.estimated_amount,
+  b.currency_code,
+  b.exchange_rate_to_base,
+  b.base_currency_amount,
+  b.notes,
+  b.created_on as created_at,
+  b.updated_on as updated_at,
+  b.deleted_at,
+  b.deleted_reason,
+  b.deleted_by
+from fund.budget b
+join fund.campaign c on c.campaign_id = b.campaign_id
+join fund.expense_category ec
+  on ec.expense_category_id = b.expense_category_id;
 
 create or replace view fund.v_admin_donor as
 select
@@ -193,11 +222,13 @@ end;
 $$;
 
 grant usage on schema fund to service_role;
+grant select, insert, update on fund.budget to service_role;
 grant select on fund.campaign to service_role;
 grant select on fund.currency to service_role;
 grant select, insert, update on fund.donor to service_role;
 grant select, insert, update on fund.donation to service_role;
 grant select, insert, update on fund.expense_category to service_role;
+grant select on fund.v_admin_budget to service_role;
 grant select on fund.v_admin_donation to service_role;
 grant select on fund.v_admin_donor to service_role;
 grant select on fund.v_admin_expense to service_role;
@@ -286,6 +317,7 @@ left join (
   and exp.expense_category_id = b.expense_category_id
 where c.is_public = true
   and c.is_active = true
+  and b.deleted_at is null
   and cat.deleted_at is null
 group by
   b.campaign_id,

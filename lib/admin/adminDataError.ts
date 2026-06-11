@@ -32,10 +32,13 @@ export function formatAdminDataError(error: unknown): string {
     message.includes("v_admin_expense") ||
     message.includes("v_admin_donation") ||
     message.includes("v_admin_donor") ||
+    message.includes("v_admin_budget") ||
     message.includes("admin_insert_audit_log") ||
+    message.includes("fund.budget") ||
     message.includes("fund.donation") ||
     message.includes("fund.expense") ||
     message.includes("permission denied for schema fund") ||
+    message.includes("permission denied for table budget") ||
     message.includes("permission denied for table campaign") ||
     message.includes("permission denied for table currency") ||
     message.includes("permission denied for table donation") ||
