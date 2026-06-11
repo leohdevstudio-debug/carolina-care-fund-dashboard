@@ -69,5 +69,11 @@ export async function adminFetch<T>(
     );
   }
 
-  return response.json() as Promise<T>;
+  const text = await response.text();
+
+  if (!text.trim()) {
+    return undefined as T;
+  }
+
+  return JSON.parse(text) as T;
 }

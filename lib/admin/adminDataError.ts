@@ -33,9 +33,11 @@ export function formatAdminDataError(error: unknown): string {
     message.includes("v_admin_donation") ||
     message.includes("v_admin_donor") ||
     message.includes("v_admin_budget") ||
+    message.includes("v_admin_campaign") ||
     message.includes("v_admin_exchange_rate") ||
     message.includes("admin_insert_audit_log") ||
     message.includes("fund.budget") ||
+    message.includes("fund.campaign") ||
     message.includes("fund.donation") ||
     message.includes("fund.expense") ||
     message.includes("fund.exchange_rates") ||

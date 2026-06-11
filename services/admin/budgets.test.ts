@@ -8,8 +8,13 @@ vi.mock("@/lib/exchangeRates", () => ({
   getCurrentExchangeRates: vi.fn(),
 }));
 
+vi.mock("@/services/admin/campaignTargets", () => ({
+  recalculateCampaignTargets: vi.fn(),
+}));
+
 import { adminFetch } from "@/lib/admin/supabaseAdmin";
 import { getCurrentExchangeRates } from "@/lib/exchangeRates";
+import { recalculateCampaignTargets } from "@/services/admin/campaignTargets";
 import {
   createAdminBudget,
   listAdminBudgets,
@@ -20,6 +25,7 @@ import {
 
 const adminFetchMock = vi.mocked(adminFetch);
 const getCurrentExchangeRatesMock = vi.mocked(getCurrentExchangeRates);
+const recalculateCampaignTargetsMock = vi.mocked(recalculateCampaignTargets);
 
 const budget = {
   base_currency_amount: 100,
@@ -54,6 +60,8 @@ describe("admin budget service", () => {
   beforeEach(() => {
     adminFetchMock.mockReset();
     getCurrentExchangeRatesMock.mockReset();
+    recalculateCampaignTargetsMock.mockReset();
+    recalculateCampaignTargetsMock.mockResolvedValue();
     getCurrentExchangeRatesMock.mockResolvedValue({
       baseCurrency: "AUD",
       rates: {
@@ -86,6 +94,7 @@ describe("admin budget service", () => {
 
     await expect(createAdminBudget(input)).resolves.toEqual(budget);
 
+    expect(recalculateCampaignTargetsMock).toHaveBeenCalledWith([1]);
     expect(adminFetchMock).toHaveBeenNthCalledWith(
       1,
       "budget",
@@ -128,6 +137,7 @@ describe("admin budget service", () => {
       estimatedAmount: 130,
     });
 
+    expect(recalculateCampaignTargetsMock).toHaveBeenCalledWith([1]);
     expect(adminFetchMock).toHaveBeenNthCalledWith(
       2,
       "budget",
@@ -154,6 +164,7 @@ describe("admin budget service", () => {
 
     await softDeleteAdminBudget(5, "Duplicate");
 
+    expect(recalculateCampaignTargetsMock).toHaveBeenCalledWith([1]);
     expect(adminFetchMock).toHaveBeenNthCalledWith(
       4,
       "rpc/admin_insert_audit_log",
@@ -182,6 +193,7 @@ describe("admin budget service", () => {
 
     await restoreAdminBudget(5);
 
+    expect(recalculateCampaignTargetsMock).toHaveBeenCalledWith([1]);
     expect(adminFetchMock).toHaveBeenNthCalledWith(
       4,
       "rpc/admin_insert_audit_log",

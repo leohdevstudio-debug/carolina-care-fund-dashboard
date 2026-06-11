@@ -2,6 +2,7 @@ import type { DisplayCurrency } from "@/lib/currency";
 import { getCurrentExchangeRates } from "@/lib/exchangeRates";
 import { adminFetch } from "@/lib/admin/supabaseAdmin";
 import type { AdminBudgetInput } from "@/lib/admin/budgetValidation";
+import { recalculateCampaignTargets } from "@/services/admin/campaignTargets";
 
 export type AdminBudgetStatus = "active" | "deleted" | "all";
 
@@ -191,6 +192,7 @@ export async function createAdminBudget(
 
   const row = await fetchBudget(inserted.budget_id, "Budget was not created");
 
+  await recalculateCampaignTargets([row.campaign_id]);
   await writeAudit(String(row.budget_id), "create", null, row);
 
   return row;
@@ -236,6 +238,11 @@ export async function updateAdminBudget(
 
   const row = await fetchBudget(budgetId, "Budget was not updated");
 
+  await recalculateCampaignTargets(
+    previous.campaign_id === row.campaign_id
+      ? [row.campaign_id]
+      : [previous.campaign_id, row.campaign_id]
+  );
   await writeAudit(String(budgetId), "update", previous, row);
 
   return row;
@@ -268,6 +275,7 @@ export async function softDeleteAdminBudget(
 
   const row = await fetchBudget(budgetId, "Budget was not deleted");
 
+  await recalculateCampaignTargets([row.campaign_id]);
   await writeAudit(String(budgetId), "soft_delete", previous, row, reason);
 
   return row;
@@ -298,6 +306,7 @@ export async function restoreAdminBudget(
 
   const row = await fetchBudget(budgetId, "Budget was not restored");
 
+  await recalculateCampaignTargets([row.campaign_id]);
   await writeAudit(String(budgetId), "restore", previous, row);
 
   return row;

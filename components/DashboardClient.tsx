@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import SummaryCard from "@/components/SummaryCard";
 import SectionCard from "@/components/SectionCard";
@@ -13,6 +14,10 @@ import {
   type DisplayCurrency,
   type ExchangeRateResponse,
 } from "@/lib/currency";
+import {
+  getDashboardDisplayAmounts,
+} from "@/lib/dashboardDisplayAmounts";
+import { buildAdminLoginHref } from "@/lib/admin/adminRedirect";
 import { messages, Locale } from "@/messages";
 import ExpenseCategoryChart from "@/components/ExpenseCategoryChart";
 import BudgetVsSpentChart from "@/components/BudgetVsSpentChart";
@@ -166,16 +171,6 @@ export default function DashboardClient({
 
   // 20260608_2305_01_FixDisplayedDonationTotals.tsx
 
-  // Return the original donation amount when it already matches the selected display currency.
-  // Otherwise, convert the base AUD amount to the selected display currency.
-  const getDonationDisplayAmount = (donation: PublicDonation) => {
-    if (donation.currency_code === displayCurrency) {
-      return Number(donation.original_amount ?? 0);
-    }
-
-    return displayAmount(donation.base_currency_amount);
-  };
-
   // Format a donation using the original currency amount when possible.
   const formatDonationDisplayCurrency = (donation: PublicDonation) => {
     if (donation.currency_code === displayCurrency) {
@@ -189,15 +184,18 @@ export default function DashboardClient({
     return formatDisplayCurrency(donation.base_currency_amount);
   };
 
-  // Calculate displayed totals using the donation original amount when it matches the selected currency.
-  const displayedTotalReceived = donations.reduce(
-    (total, donation) => total + getDonationDisplayAmount(donation),
-    0
-  );
-
-  const displayedTotalSpent = displayAmount(summary.total_spent_base);
-  const displayedRemainingBalance =
-    displayedTotalReceived - displayedTotalSpent;
+  const {
+    displayedRemainingBalance,
+    displayedTotalReceived,
+    displayedTotalSpent,
+    progressFundedAmount,
+  } = getDashboardDisplayAmounts({
+    displayCurrency,
+    donations,
+    exchangeRates,
+    totalReceivedBase: totalReceived,
+    totalSpentBase: Number(summary.total_spent_base ?? 0),
+  });
 
   const convertedExpenseByCategory = expenseByCategory.map((item) => ({
     ...item,
@@ -387,7 +385,12 @@ export default function DashboardClient({
               {/* Progress footnotes */}
               <div className="flex items-center justify-between gap-4 text-xs text-violet-800">
                 <span className="font-mono tabular-nums">
-                  {formatDisplayCurrency(totalReceived)} {t.progress.funded}
+                  {formatCurrency(
+                    progressFundedAmount,
+                    displayCurrency,
+                    displayLocale
+                  )}{" "}
+                  {t.progress.funded}
                 </span>
                 <span className="font-mono tabular-nums">
                   {formatDisplayCurrency(remainingToTarget)}{" "}
@@ -643,6 +646,15 @@ export default function DashboardClient({
                 {t.currency.sourcePrefix}: {exchangeRates.source}
               </p>
             )}
+            <div className="pt-3">
+              <Link
+                aria-label="Admin access"
+                className="text-[10px] text-muted opacity-[0.35] transition-opacity hover:opacity-100 focus:opacity-100 focus:outline-none"
+                href={buildAdminLoginHref("/admin")}
+              >
+                Admin
+              </Link>
+            </div>
           </div>
         </footer>
       </div>

@@ -81,10 +81,73 @@ alter table if exists fund.budget
   add column if not exists deleted_reason text,
   add column if not exists deleted_by text;
 
+alter table if exists fund.campaign
+  add column if not exists deleted_at timestamptz,
+  add column if not exists deleted_reason text,
+  add column if not exists deleted_by text,
+  add column if not exists target_amount_mode text not null default 'budget_auto',
+  add column if not exists target_adjustment_amount numeric(18, 2) not null default 0;
+
+do $$
+begin
+  if to_regclass('fund.campaign') is not null then
+    alter table fund.campaign
+      add constraint campaign_target_amount_mode_check
+      check (target_amount_mode in ('budget_auto', 'manual'));
+  end if;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  if to_regclass('fund.campaign') is not null then
+    alter table fund.campaign
+      add constraint campaign_target_adjustment_nonnegative_check
+      check (target_adjustment_amount >= 0);
+  end if;
+exception
+  when duplicate_object then null;
+end $$;
+
 alter table if exists fund.expense_category
   add column if not exists deleted_at timestamptz,
   add column if not exists deleted_reason text,
   add column if not exists deleted_by text;
+
+create or replace function fund.recalculate_campaign_target(
+  p_campaign_id integer
+)
+returns void
+language plpgsql
+security definer
+set search_path = fund
+as $$
+declare
+  v_budget_target_amount numeric;
+begin
+  select coalesce(sum(coalesce(b.base_currency_amount, 0::numeric)), 0::numeric)
+  into v_budget_target_amount
+  from fund.budget b
+  join fund.expense_category ec
+    on ec.expense_category_id = b.expense_category_id
+  where b.campaign_id = p_campaign_id
+    and b.deleted_at is null
+    and ec.deleted_at is null;
+
+  update fund.campaign c
+  set
+    target_amount = case
+      when coalesce(c.target_amount_mode, 'budget_auto') = 'budget_auto'
+        then v_budget_target_amount + coalesce(c.target_adjustment_amount, 0)
+      else c.target_amount
+    end,
+    target_currency_code = 'AUD',
+    updated_on = now(),
+    updated_by = 'admin'
+  where c.campaign_id = p_campaign_id;
+end;
+$$;
 
 create or replace view fund.v_admin_expense as
 select
@@ -184,6 +247,42 @@ join fund.campaign c on c.campaign_id = b.campaign_id
 join fund.expense_category ec
   on ec.expense_category_id = b.expense_category_id;
 
+create or replace view fund.v_admin_campaign as
+select
+  c.campaign_id,
+  c.campaign_name,
+  c.campaign_description,
+  c.beneficiary_name,
+  c.start_date,
+  c.end_date,
+  c.target_amount,
+  btrim(c.target_currency_code::text) as target_currency_code,
+  coalesce(c.target_amount_mode, 'budget_auto') as target_amount_mode,
+  coalesce(c.target_adjustment_amount, 0::numeric) as target_adjustment_amount,
+  (
+    coalesce(budget.total_budget_base, 0::numeric) +
+    coalesce(c.target_adjustment_amount, 0::numeric)
+  ) as computed_budget_target_amount,
+  c.is_public,
+  c.is_active,
+  c.created_on as created_at,
+  c.updated_on as updated_at,
+  c.deleted_at,
+  c.deleted_reason,
+  c.deleted_by
+from fund.campaign c
+left join (
+  select
+    b.campaign_id,
+    sum(coalesce(b.base_currency_amount, 0::numeric)) as total_budget_base
+  from fund.budget b
+  join fund.expense_category ec
+    on ec.expense_category_id = b.expense_category_id
+  where b.deleted_at is null
+    and ec.deleted_at is null
+  group by b.campaign_id
+) budget on budget.campaign_id = c.campaign_id;
+
 create or replace view fund.v_admin_donor as
 select
   d.donor_id,
@@ -256,13 +355,14 @@ $$;
 
 grant usage on schema fund to service_role;
 grant select, insert, update on fund.budget to service_role;
-grant select on fund.campaign to service_role;
+grant select, insert, update on fund.campaign to service_role;
 grant select on fund.currency to service_role;
 grant select, insert, update on fund.donor to service_role;
 grant select, insert, update on fund.donation to service_role;
 grant select, insert, update on fund.exchange_rates to service_role;
 grant select, insert, update on fund.expense_category to service_role;
 grant select on fund.v_admin_budget to service_role;
+grant select on fund.v_admin_campaign to service_role;
 grant select on fund.v_admin_donation to service_role;
 grant select on fund.v_admin_donor to service_role;
 grant select on fund.v_admin_exchange_rate to service_role;
@@ -279,6 +379,11 @@ grant execute on function fund.admin_insert_audit_log(
   jsonb,
   text
 ) to service_role;
+grant execute on function fund.recalculate_campaign_target(integer) to service_role;
+
+select fund.recalculate_campaign_target(campaign_id)
+from fund.campaign
+where coalesce(target_amount_mode, 'budget_auto') = 'budget_auto';
 
 create or replace view fund.v_public_expense as
 select
@@ -299,6 +404,7 @@ join fund.expense_category cat
   on cat.expense_category_id = e.expense_category_id
 where c.is_public = true
   and c.is_active = true
+  and c.deleted_at is null
   and cat.deleted_at is null
   and e.deleted_at is null;
 
@@ -315,6 +421,7 @@ join fund.expense_category cat
   on cat.expense_category_id = e.expense_category_id
 where c.is_public = true
   and c.is_active = true
+  and c.deleted_at is null
   and cat.deleted_at is null
   and e.deleted_at is null
 group by
@@ -352,6 +459,7 @@ left join (
   and exp.expense_category_id = b.expense_category_id
 where c.is_public = true
   and c.is_active = true
+  and c.deleted_at is null
   and b.deleted_at is null
   and cat.deleted_at is null
 group by
@@ -408,7 +516,8 @@ left join (
   group by e.campaign_id
 ) exp on exp.campaign_id = c.campaign_id
 where c.is_public = true
-  and c.is_active = true;
+  and c.is_active = true
+  and c.deleted_at is null;
 
 create or replace view fund.v_public_donation as
 select
@@ -433,6 +542,7 @@ join fund.campaign c on c.campaign_id = d.campaign_id
 left join fund.donor donor on donor.donor_id = d.donor_id
 where c.is_public = true
   and c.is_active = true
+  and c.deleted_at is null
   and d.is_confirmed = true
   and d.deleted_at is null;
 

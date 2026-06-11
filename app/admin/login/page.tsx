@@ -1,13 +1,45 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { sanitizeAdminNextPath } from "@/lib/admin/adminRedirect";
+
+function getNextPath(): string {
+  if (typeof window === "undefined") {
+    return "/admin";
+  }
+
+  const params = new URLSearchParams(window.location.search);
+
+  return sanitizeAdminNextPath(params.get("next"));
+}
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function redirectAuthenticatedAdmin() {
+      const response = await fetch("/api/admin/session").catch(() => null);
+      const body = (await response?.json().catch(() => null)) as {
+        authenticated?: boolean;
+      } | null;
+
+      if (isCurrent && body?.authenticated) {
+        router.replace(getNextPath());
+      }
+    }
+
+    redirectAuthenticatedAdmin();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,7 +59,7 @@ export default function AdminLoginPage() {
       return;
     }
 
-    router.replace("/admin/expenses");
+    router.replace(getNextPath());
     router.refresh();
   }
 

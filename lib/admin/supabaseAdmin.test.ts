@@ -46,4 +46,18 @@ describe("adminFetch", () => {
       adminFetch("v_admin_expense", "select=*", { fetcher })
     ).rejects.toBeInstanceOf(SupabaseAdminRequestError);
   });
+
+  it("returns undefined for successful admin requests without a response body", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_SCHEMA", "fund");
+
+    const fetcher = vi.fn(
+      async () => new Response(null, { status: 204 })
+    );
+
+    await expect(
+      adminFetch("rpc/recalculate_campaign_target", "", { fetcher })
+    ).resolves.toBeUndefined();
+  });
 });
