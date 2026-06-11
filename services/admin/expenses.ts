@@ -1,7 +1,7 @@
 import type { DisplayCurrency } from "@/lib/currency";
-import { getCurrentExchangeRates } from "@/lib/exchangeRates";
 import { adminFetch } from "@/lib/admin/supabaseAdmin";
 import type { AdminExpenseInput } from "@/lib/admin/expenseValidation";
+import { getAdminExchangeRateSnapshotForDate } from "@/services/admin/exchangeRateSnapshots";
 
 export type AdminExpenseStatus = "active" | "deleted" | "all";
 
@@ -130,7 +130,7 @@ export async function listAdminExpenses(
 export async function createAdminExpense(
   input: AdminExpenseInput
 ): Promise<AdminExpenseRow> {
-  const rates = await getCurrentExchangeRates();
+  const rates = await getAdminExchangeRateSnapshotForDate(input.expenseDate);
   const rows = await adminFetch<AdminExpenseRow[]>("expense", "select=*", {
     method: "POST",
     prefer: "return=representation",
@@ -177,7 +177,9 @@ export async function updateAdminExpense(
     previous.expense_date !== input.expenseDate ||
     previous.original_amount !== input.originalAmount ||
     previous.currency_code !== input.currencyCode;
-  const rates = needsRateSnapshot ? await getCurrentExchangeRates() : null;
+  const rates = needsRateSnapshot
+    ? await getAdminExchangeRateSnapshotForDate(input.expenseDate)
+    : null;
   const rows = await adminFetch<AdminExpenseRow[]>(
     "expense",
     `expense_id=eq.${expenseId}&select=*`,

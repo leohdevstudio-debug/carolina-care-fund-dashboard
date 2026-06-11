@@ -30,6 +30,27 @@ on fund.admin_audit_log
 for select
 using (false);
 
+create table if not exists fund.exchange_rates (
+  exchange_rate_id bigint generated always as identity primary key,
+  rate_date date not null,
+  base_currency_code text not null,
+  quote_currency_code text not null,
+  rate numeric(18, 8) not null,
+  source text not null,
+  fetched_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  constraint exchange_rates_positive_rate check (rate > 0),
+  constraint exchange_rates_supported_base check (base_currency_code = 'AUD'),
+  constraint exchange_rates_supported_quote check (
+    quote_currency_code in ('USD', 'TWD')
+  ),
+  constraint exchange_rates_unique_pair_per_date unique (
+    rate_date,
+    base_currency_code,
+    quote_currency_code
+  )
+);
+
 alter table if exists fund.expense
   add column if not exists deleted_at timestamptz,
   add column if not exists deleted_reason text,
@@ -126,6 +147,18 @@ select
 from fund.donation d
 join fund.campaign c on c.campaign_id = d.campaign_id
 left join fund.donor donor on donor.donor_id = d.donor_id;
+
+create or replace view fund.v_admin_exchange_rate as
+select
+  er.exchange_rate_id,
+  er.rate_date,
+  er.base_currency_code,
+  er.quote_currency_code,
+  er.rate,
+  er.source,
+  er.fetched_at,
+  er.created_at
+from fund.exchange_rates er;
 
 create or replace view fund.v_admin_budget as
 select
@@ -227,10 +260,12 @@ grant select on fund.campaign to service_role;
 grant select on fund.currency to service_role;
 grant select, insert, update on fund.donor to service_role;
 grant select, insert, update on fund.donation to service_role;
+grant select, insert, update on fund.exchange_rates to service_role;
 grant select, insert, update on fund.expense_category to service_role;
 grant select on fund.v_admin_budget to service_role;
 grant select on fund.v_admin_donation to service_role;
 grant select on fund.v_admin_donor to service_role;
+grant select on fund.v_admin_exchange_rate to service_role;
 grant select on fund.v_admin_expense to service_role;
 grant select on fund.v_admin_expense_category to service_role;
 grant select, insert, update on fund.expense to service_role;
