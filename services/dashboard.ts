@@ -78,6 +78,6 @@ export async function getPublicDonations(): Promise<PublicDonation[]> {
 export async function getPublicExpenses(): Promise<PublicExpense[]> {
   return fetchFromView<PublicExpense[]>(
     "v_public_expense",
-    "select=*&order=expense_date.desc&limit=10"
+    "select=*&order=expense_date.desc"
   );
 }

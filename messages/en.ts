@@ -29,6 +29,7 @@ const en = {
     budgetVsSpent: "Budget vs Spent",
     recentDonations: "Recent donations",
     recentExpenses: "Recent expenses",
+    monthlyExpenses: "Monthly expense summary",
   },
   table: {
     date: "Date",
@@ -37,6 +38,13 @@ const en = {
     base: "Displayed amount",
     category: "Category",
     description: "Description",
+    month: "Month",
+    records: "Records",
+    total: "Total",
+    noRecords: "No records found.",
+  },
+  actions: {
+    downloadExpenseDetails: "Download details",
   },
   charts: {
     budget: "Budget",

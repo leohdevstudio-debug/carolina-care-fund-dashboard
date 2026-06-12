@@ -28,6 +28,7 @@ const zhTW = {
     budgetVsSpent: "預算 vs 實際支出",
     recentDonations: "最近捐款",
     recentExpenses: "最近支出",
+    monthlyExpenses: "每月支出摘要",
   },
   table: {
     date: "日期",
@@ -36,6 +37,13 @@ const zhTW = {
     base: "顯示金額",
     category: "類別",
     description: "描述",
+    month: "月份",
+    records: "筆數",
+    total: "總計",
+    noRecords: "沒有資料。",
+  },
+  actions: {
+    downloadExpenseDetails: "下載明細",
   },
   charts: {
     budget: "預算",

@@ -14,10 +14,13 @@ import {
   type DisplayCurrency,
   type ExchangeRateResponse,
 } from "@/lib/currency";
-import {
-  getDashboardDisplayAmounts,
-} from "@/lib/dashboardDisplayAmounts";
+import { getDashboardDisplayAmounts } from "@/lib/dashboardDisplayAmounts";
 import { buildAdminLoginHref } from "@/lib/admin/adminRedirect";
+import {
+  buildExpenseExportCsv,
+  buildExpenseExportFileName,
+  summarizeExpensesByMonth,
+} from "@/lib/publicExpenseExport";
 import { messages, Locale } from "@/messages";
 import ExpenseCategoryChart from "@/components/ExpenseCategoryChart";
 import BudgetVsSpentChart from "@/components/BudgetVsSpentChart";
@@ -208,6 +211,31 @@ export default function DashboardClient({
     total_spent_base: displayAmount(item.total_spent_base),
     variance_base: displayAmount(item.variance_base),
   }));
+  const monthlyExpenseSummaries = summarizeExpensesByMonth({
+    displayCurrency,
+    exchangeRates,
+    expenses,
+    locale: displayLocale,
+  });
+
+  function downloadExpenseDetails() {
+    const csv = buildExpenseExportCsv({
+      displayCurrency,
+      exchangeRates,
+      expenses,
+      locale: displayLocale,
+    });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = buildExpenseExportFileName();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  }
 
   const rateDate = formatDate(exchangeRates.fetchedAt);
   const rateNote =
@@ -550,28 +578,49 @@ export default function DashboardClient({
             </div>
           </SectionCard>
 
-          {/* Expenses table */}
-          <SectionCard title={t.sections.recentExpenses}>
+          {/* Expenses summary */}
+          <SectionCard title={t.sections.monthlyExpenses}>
+            <div className="mb-4 flex justify-end">
+              <button
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent-bg disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={expenses.length === 0}
+                onClick={downloadExpenseDetails}
+                type="button"
+              >
+                {t.actions.downloadExpenseDetails}
+              </button>
+            </div>
+
             {/* Mobile stacked rows */}
             <div className="divide-y divide-border sm:hidden">
-              {expenses.map((e) => (
+              {monthlyExpenseSummaries.map((month) => (
                 <div
-                  key={e.expense_id}
+                  key={month.key}
                   className="flex items-center justify-between gap-3 py-3.5"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">
-                      {e.expense_description || e.category_name}
+                      {month.label}
                     </p>
                     <p className="mt-0.5 text-xs text-muted">
-                      {e.category_name} - {formatDate(e.expense_date)}
+                      {month.count.toLocaleString(displayLocale)}{" "}
+                      {t.table.records}
                     </p>
                   </div>
                   <p className="shrink-0 font-mono text-sm font-medium tabular-nums text-foreground">
-                    {formatDisplayCurrency(e.base_currency_amount)}
+                    {formatCurrency(
+                      month.displayAmount,
+                      displayCurrency,
+                      displayLocale
+                    )}
                   </p>
                 </div>
               ))}
+              {monthlyExpenseSummaries.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted">
+                  {t.table.noRecords}
+                </p>
+              ) : null}
             </div>
 
             {/* Desktop table */}
@@ -583,48 +632,53 @@ export default function DashboardClient({
                       scope="col"
                       className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted"
                     >
-                      {t.table.date}
+                      {t.table.month}
                     </th>
                     <th
                       scope="col"
-                      className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted"
+                      className="pb-3 pr-5 text-right text-xs font-semibold uppercase tracking-wider text-muted"
                     >
-                      {t.table.category}
-                    </th>
-                    <th
-                      scope="col"
-                      className="pb-3 pr-5 text-left text-xs font-semibold uppercase tracking-wider text-muted"
-                    >
-                      {t.table.description}
+                      {t.table.records}
                     </th>
                     <th
                       scope="col"
                       className="pb-3 text-right text-xs font-semibold uppercase tracking-wider text-muted"
                     >
-                      {t.table.base}
+                      {t.table.total}
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {expenses.map((e) => (
+                  {monthlyExpenseSummaries.map((month) => (
                     <tr
-                      key={e.expense_id}
+                      key={month.key}
                       className="transition-colors duration-150 hover:bg-background"
                     >
                       <td className="py-3.5 pr-5 text-sm text-muted">
-                        {formatDate(e.expense_date)}
+                        {month.label}
                       </td>
-                      <td className="py-3.5 pr-5 text-sm text-foreground">
-                        {e.category_name}
-                      </td>
-                      <td className="py-3.5 pr-5 text-sm text-muted">
-                        {e.expense_description}
+                      <td className="py-3.5 pr-5 text-right font-mono text-sm tabular-nums text-foreground">
+                        {month.count.toLocaleString(displayLocale)}
                       </td>
                       <td className="py-3.5 text-right font-mono text-sm font-medium tabular-nums text-foreground">
-                        {formatDisplayCurrency(e.base_currency_amount)}
+                        {formatCurrency(
+                          month.displayAmount,
+                          displayCurrency,
+                          displayLocale
+                        )}
                       </td>
                     </tr>
                   ))}
+                  {monthlyExpenseSummaries.length === 0 ? (
+                    <tr>
+                      <td
+                        className="py-8 text-center text-sm text-muted"
+                        colSpan={3}
+                      >
+                        {t.table.noRecords}
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>
