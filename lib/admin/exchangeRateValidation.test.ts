@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseExchangeRateInput } from "@/lib/admin/exchangeRateValidation";
+import {
+  parseExchangeRateFetchInput,
+  parseExchangeRateInput,
+} from "@/lib/admin/exchangeRateValidation";
 
 const validRate = {
   rateDate: "2026-06-11",
@@ -53,5 +56,19 @@ describe("parseExchangeRateInput", () => {
         fetchedAt: "not-a-date",
       })
     ).toThrow("Fetched at must be a valid ISO datetime");
+  });
+});
+
+describe("parseExchangeRateFetchInput", () => {
+  it("accepts a valid rate date payload", () => {
+    expect(parseExchangeRateFetchInput({ rateDate: "2026-05-01" })).toEqual({
+      rateDate: "2026-05-01",
+    });
+  });
+
+  it("rejects invalid rate dates", () => {
+    expect(() =>
+      parseExchangeRateFetchInput({ rateDate: "2026-02-30" })
+    ).toThrow("Rate date must be a valid ISO date");
   });
 });

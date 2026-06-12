@@ -19,6 +19,13 @@ type FormState = {
   fetchedAt: string;
 };
 
+type FetchRatesResult = {
+  createdCount: number;
+  existingCount: number;
+  rateDate: string;
+  rates: AdminExchangeRateRow[];
+};
+
 function toDatetimeLocalValue(isoValue: string): string {
   const parsed = new Date(isoValue);
 
@@ -61,6 +68,16 @@ async function readJsonError(response: Response, fallback: string) {
   return body?.error ?? fallback;
 }
 
+function fetchSuccessMessage(result: FetchRatesResult): string {
+  if (result.createdCount > 0) {
+    return `${result.createdCount} rate${
+      result.createdCount === 1 ? "" : "s"
+    } saved for ${result.rateDate}.`;
+  }
+
+  return `USD/TWD rates already exist for ${result.rateDate}.`;
+}
+
 export default function ExchangeRatesAdminClient({
   initialError = "",
   initialExchangeRates,
@@ -74,7 +91,9 @@ export default function ExchangeRatesAdminClient({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState(initialError);
   const [isSaving, setIsSaving] = useState(false);
+  const [isFetchingRates, setIsFetchingRates] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [fetchMessage, setFetchMessage] = useState("");
 
   const latestByQuote = useMemo(() => {
     const latest = new Map<string, AdminExchangeRateRow>();
@@ -115,6 +134,7 @@ export default function ExchangeRatesAdminClient({
     setEditing(null);
     setForm(emptyForm());
     setError("");
+    setFetchMessage("");
     setIsDrawerOpen(true);
   }
 
@@ -122,6 +142,7 @@ export default function ExchangeRatesAdminClient({
     setEditing(row);
     setForm(rowToForm(row));
     setError("");
+    setFetchMessage("");
     setIsDrawerOpen(true);
   }
 
@@ -129,15 +150,62 @@ export default function ExchangeRatesAdminClient({
     setIsDrawerOpen(false);
     setEditing(null);
     setForm(emptyForm());
+    setFetchMessage("");
     if (clearError) {
       setError("");
     }
+  }
+
+  async function fetchRatesForDate() {
+    setIsFetchingRates(true);
+    setError("");
+    setFetchMessage("");
+
+    let response: Response;
+    try {
+      response = await fetch("/api/admin/exchange-rates/fetch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          rateDate: form.rateDate,
+        }),
+      });
+    } catch {
+      setIsFetchingRates(false);
+      setError("Unable to fetch exchange rates");
+      return;
+    }
+
+    setIsFetchingRates(false);
+
+    if (!response.ok) {
+      setError(await readJsonError(response, "Unable to fetch exchange rates"));
+      return;
+    }
+
+    const result = (await response.json()) as FetchRatesResult;
+    const selectedRate = result.rates.find(
+      (row) => row.quote_currency_code === form.quoteCurrencyCode
+    );
+
+    if (selectedRate) {
+      setForm((current) => ({
+        ...current,
+        fetchedAt: toDatetimeLocalValue(selectedRate.fetched_at),
+        rate: String(selectedRate.rate),
+        source: selectedRate.source,
+      }));
+    }
+
+    setFetchMessage(fetchSuccessMessage(result));
+    await refresh();
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSaving(true);
     setError("");
+    setFetchMessage("");
 
     const payload = {
       fetchedAt: toIsoDatetime(form.fetchedAt),
@@ -244,7 +312,7 @@ export default function ExchangeRatesAdminClient({
                 <th className="px-3 py-2">Pair</th>
                 <th className="px-3 py-2 text-right">Rate</th>
                 <th className="px-3 py-2">Source</th>
-                <th className="px-3 py-2">Fetched</th>
+                <th className="px-3 py-2">Retrieved</th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
@@ -327,22 +395,39 @@ export default function ExchangeRatesAdminClient({
                   {error}
                 </p>
               ) : null}
+              {fetchMessage ? (
+                <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary">
+                  {fetchMessage}
+                </p>
+              ) : null}
 
               <label className="flex flex-col gap-1 text-sm font-medium">
                 Rate date
                 <input
                   className="rounded-md border border-border px-3 py-2 text-sm"
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setFetchMessage("");
                     setForm((current) => ({
                       ...current,
                       rateDate: event.target.value,
-                    }))
-                  }
+                    }));
+                  }}
                   required
                   type="date"
                   value={form.rateDate}
                 />
               </label>
+
+              {!editing ? (
+                <button
+                  className="rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium disabled:opacity-60"
+                  disabled={isFetchingRates || !form.rateDate}
+                  onClick={fetchRatesForDate}
+                  type="button"
+                >
+                  {isFetchingRates ? "Fetching..." : "Fetch USD/TWD rates"}
+                </button>
+              ) : null}
 
               <label className="flex flex-col gap-1 text-sm font-medium">
                 Quote currency
@@ -396,7 +481,7 @@ export default function ExchangeRatesAdminClient({
               </label>
 
               <label className="flex flex-col gap-1 text-sm font-medium">
-                Fetched at
+                Retrieved at
                 <input
                   className="rounded-md border border-border px-3 py-2 text-sm"
                   onChange={(event) =>

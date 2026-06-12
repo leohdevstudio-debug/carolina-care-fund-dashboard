@@ -6,6 +6,10 @@ export type AdminExchangeRateInput = {
   fetchedAt: string;
 };
 
+export type AdminExchangeRateFetchInput = {
+  rateDate: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -73,5 +77,17 @@ export function parseExchangeRateInput(
     rate: requirePositiveRate(value.rate),
     source: requireString(value.source, "Source"),
     fetchedAt: requireIsoDateTime(value.fetchedAt, "Fetched at"),
+  };
+}
+
+export function parseExchangeRateFetchInput(
+  value: unknown
+): AdminExchangeRateFetchInput {
+  if (!isRecord(value)) {
+    throw new Error("Exchange-rate fetch payload is required");
+  }
+
+  return {
+    rateDate: requireIsoDate(value.rateDate, "Rate date"),
   };
 }

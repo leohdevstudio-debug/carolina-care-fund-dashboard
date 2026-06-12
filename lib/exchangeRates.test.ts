@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   clearExchangeRateCache,
+  fetchHistoricalProviderExchangeRates,
   fetchProviderExchangeRates,
   getCurrentExchangeRates,
 } from "@/lib/exchangeRates";
@@ -119,5 +120,66 @@ describe("exchange-rate provider", () => {
       },
       isFallback: true,
     });
+  });
+
+  it("fetches historical rates for a selected date with an API key", async () => {
+    const fetcher = vi.fn(async () =>
+      response({
+        meta: {
+          last_updated_at: "2026-05-01T23:59:59Z",
+        },
+        data: {
+          USD: {
+            code: "USD",
+            value: 0.64,
+          },
+          TWD: {
+            code: "TWD",
+            value: 20.15,
+          },
+        },
+      })
+    );
+
+    await expect(
+      fetchHistoricalProviderExchangeRates(
+        "2026-05-01",
+        fetcher,
+        () => new Date("2026-06-12T01:30:00.000Z"),
+        "test-key"
+      )
+    ).resolves.toEqual({
+      baseCurrency: "AUD",
+      rates: {
+        AUD: 1,
+        USD: 0.64,
+        TWD: 20.15,
+      },
+      source: "https://currencyapi.com",
+      fetchedAt: "2026-06-12T01:30:00.000Z",
+      isFallback: false,
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://api.currencyapi.com/v3/historical?date=2026-05-01&base_currency=AUD&currencies=USD%2CTWD",
+      expect.objectContaining({
+        headers: {
+          accept: "application/json",
+          apikey: "test-key",
+        },
+      })
+    );
+  });
+
+  it("requires an API key for historical rates", async () => {
+    await expect(
+      fetchHistoricalProviderExchangeRates(
+        "2026-05-01",
+        async () => response({}),
+        () => new Date("2026-06-12T01:30:00.000Z"),
+        ""
+      )
+    ).rejects.toThrow(
+      "Historical exchange-rate lookup requires CURRENCYAPI_API_KEY"
+    );
   });
 });
